@@ -9,6 +9,22 @@ our mind.
 
 ---
 
+## OPEN — Ziggy's prototype already detects a golf swing, and this repo does not
+
+There is working code that predates everything written here: a basic setup that
+reads a golf swing on the phone. Nothing in this repository has ever detected
+anything.
+
+So the architecture below is a proposal and that prototype is evidence, and the
+evidence wins where they disagree. In particular, the prototype very likely has
+golf living on the phone, which the rules here forbid — that rule is a bet about
+the second and third sport, made by someone who had not yet made the first one
+feel good. It may survive contact. It may not.
+
+Resolve it like this: the prototype lands as a branch and a pull request, both of
+us read it, and only then do we decide what of this scaffold is worth keeping.
+Do not refactor working swing detection to satisfy a document.
+
 ## 2026-09-23 — The host is a macOS app, and the protocol is a Swift package
 
 SwiftUI, with SceneKit for the play view. Both of us are on Macs with Xcode, so
