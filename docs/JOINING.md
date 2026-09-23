@@ -39,7 +39,20 @@ shared lives in the repository:
 The split matters: anything in `CLAUDE.md` steers *both* agents, so a personal
 habit put there becomes a rule imposed on someone else's work.
 
-## 4. Your first branch
+## 4. Turn on the push guard
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Once per clone, and it has to be each of us — git does not ship hooks with a
+repository, which is why this is a line you type rather than a thing that just
+works.
+
+It refuses a push to `main`. GitHub will not do that for us: protected branches
+on a private repository need a paid plan, and we are not on one.
+
+## 5. Your first branch
 
 ```bash
 git switch -c <yourname>/<what-it-does>
