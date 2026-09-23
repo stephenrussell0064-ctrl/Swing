@@ -6,7 +6,7 @@ the part you will actually have to live by.
 ## 1. Clone and identify yourself
 
 ```bash
-git clone <repo-url> swing
+git clone https://github.com/stephenrussell0064-ctrl/swing.git
 cd swing
 git config user.name "Your Name"
 git config user.email "you@example.com"
@@ -15,10 +15,10 @@ git config user.email "you@example.com"
 ## 2. Check it builds
 
 ```bash
-cd protocol && swift test
+cd core && swift test
 ```
 
-Ten tests, all green. If they are not, say so before doing anything else — that
+Eight tests, all green. If they are not, say so before doing anything else — that
 package is the contract between the two apps and nothing built on a broken one
 is worth reviewing.
 
@@ -49,8 +49,10 @@ Once per clone, and it has to be each of us — git does not ship hooks with a
 repository, which is why this is a line you type rather than a thing that just
 works.
 
-It refuses a push to `main`. GitHub will not do that for us: protected branches
-on a private repository need a paid plan, and we are not on one.
+It refuses a push to `main` before it leaves your machine. GitHub also refuses
+it server-side — the repo is public, so classic branch protection is free and is
+switched on. The hook is the earlier, faster half of the same no: it fails in
+your terminal instead of after a round trip.
 
 ## 5. Your first branch
 

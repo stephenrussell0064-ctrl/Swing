@@ -1,7 +1,8 @@
 #!/bin/sh
 #
-# Refuses a push to main. CLAUDE.md rule 1, enforced locally because GitHub will
-# not enforce it for us on a free private repository.
+# Refuses a push to main. CLAUDE.md rule 1, caught locally. GitHub refuses it
+# too — the repo is public, so branch protection is free and switched on — but
+# this fails in your terminal instead of after a round trip.
 #
 # Not security — it is on your own machine and you can switch it off. It is
 # there for the evening you are tired, an agent has just written forty files,

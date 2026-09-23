@@ -3,14 +3,18 @@ import Foundation
 /// A direction or a rate in the **play frame**.
 ///
 /// The play frame is fixed at calibration, when the player holds the phone and
-/// points it at the screen. Until that happens there is no play frame and no
-/// vector here means anything.
+/// points it down the target line — where they intend the ball to go. Until
+/// that happens there is no play frame and no vector here means anything.
 ///
-/// - `x` — forward: from the player toward the screen.
+/// - `x` — forward: down the target line, away from the player.
 /// - `y` — up: opposed to gravity.
-/// - `z` — the player's right, facing the screen.
+/// - `z` — the player's right, facing down the line.
 ///
 /// Right-handed, so `x × y = z`. A right-hander's slice leaves with positive `z`.
+///
+/// Calibration matters more here than it would with a screen in the room: there
+/// is no fixed thing to aim at, so the player's own declared line is the only
+/// reference the game has.
 ///
 /// Encodes as `[x, y, z]`.
 public struct Vector3: Hashable, Sendable {

@@ -1,101 +1,79 @@
 # Architecture
 
+One iPhone app. No second screen, no Mac, no Apple TV, nothing to pair. You
+install it, stand up, and swing.
+
 ## The one idea
 
-**The controller does not know what golf is.**
+**The half that reads the hand does not know what golf is.**
 
-It measures a motion of the hand and describes it in physics: how fast, in what
-direction, spinning about which axis, with what tempo. It sends that. The host
-decides whether those numbers mean a 240-yard drive, a strike, or double top.
+`motion/` measures a motion and describes it in physics: how fast, in what
+direction, spinning about which axis, with what tempo. `game/` decides whether
+those numbers mean a 240-yard drive, a strike, or double top.
 
 Everything follows from this:
 
-- A new sport is a host-only change. No phone rebuild, no App Store round trip,
-  no touching the other person's directory.
-- The controller can be tuned against recorded swings forever without anyone
+- A new sport is a `game/` change. `motion/` is not touched, not rebuilt in your
+  head, not re-tuned.
+- Swing detection can be tuned against recorded swings forever without anyone
   agreeing on how golf works.
-- The interesting, opinionated, fun work — ball flight, pin physics, scoring —
-  is all in one place, and it is all pure functions over a `Shot`.
+- The interesting, opinionated work — ball flight, pin physics, scoring — is all
+  in one place and it is all pure functions over a `Shot`.
+- Two people can build at once without meeting in the same file.
 
-If you ever find `driver`, `strike` or `bullseye` in `controller/`, the design has
-leaked and it should come back out.
+If `driver`, `strike` or `bullseye` ever appear in `motion/`, the design has
+leaked and it comes back out.
 
-## Controller (`controller/`)
+## The three parts
 
-iOS, Swift, Core Motion at 100 Hz (`CMDeviceMotion` — attitude, rotation rate,
-user acceleration, gravity).
+| | What | Owner |
+| --- | --- | --- |
+| `motion/` | Core Motion at 100 Hz, calibration, swing detection, fixture recording. Produces a `Shot`. | one of us |
+| `core/` | `SwingCore`: the `Shot` type, the play frame, `MotionSample`, `Fixture`. The seam. | both, by PR |
+| `game/` | Sport modules, physics, scoring, SwiftUI. Consumes a `Shot`. | the other |
 
-**Calibrate.** Before play, the user holds the phone and points it at the screen.
-That fixes a frame: down-the-line, up, and across. Without this, "direction" is a
-number about the Earth rather than about the game, and it is meaningless.
+## motion/
 
-**Detect.** A swing is a window, not an instant. Watch for the magnitude of
-rotation rate crossing a threshold, hold the buffer, find the peak, then find
-release — the moment of maximum speed, just before the sharp deceleration.
-Everything is computed from the ring buffer around that moment, which means
-detection is retrospective and can be as careful as it likes.
+**Calibrate.** The player holds the phone and points it down the target line —
+where they mean the ball to go. That fixes the play frame. With no screen in the
+room there is nothing else to aim at, so the player's declared line is the only
+reference the game has, and getting this to feel unfussy is real work.
 
-**Describe.** Reduce the window to a `Shot` and send it. Fire a haptic on
-release so the hand gets the feedback at the moment it expects it, not when the
-screen catches up.
+**Detect.** A swing is a window, not an instant. Watch the magnitude of rotation
+rate cross a threshold, hold the ring buffer, find the peak, then find release —
+maximum speed, just before the sharp deceleration. Detection is retrospective,
+which is what lets it be careful.
 
-**Record.** Every detected swing can be written to `fixtures/` with its full
-trace. This is a debug feature that is really the test suite.
+**Describe.** Reduce the window to a `Shot`. Fire a haptic at release, so the
+hand gets its feedback when it expects it rather than when the screen catches up.
+With no second screen the haptic is doing more work than it would otherwise: for
+the length of the follow-through it is the only feedback there is.
 
-## Protocol (`protocol/`)
+**Record.** Any detected swing can be written to `fixtures/` with its full trace.
+A debug feature that is really the test suite.
 
-A Swift package, `SwingProtocol`, imported by both the controller and the host.
-One definition of `Shot`, so the schema cannot drift between two apps that ship
-separately.
+## core/
 
-- `Shot` — the event, and `Shot.Kind`: swing, roll, throw.
-- `Vector3`, `Quaternion` — the play frame, and the convention that fixes it.
-- `MotionSample` — one Core Motion tick. `Fixture` — a recorded trace plus the
-  `Shot` made of it.
-- `Wire` — version negotiation, the Bonjour service type, and the two message
-  enums. `Wire.ControllerMessage` only ever goes phone → host and
-  `Wire.HostMessage` only ever goes host → phone; the types say so, so neither
-  side can accidentally send the other's traffic.
+`SwingCore`, a Swift package. `Shot` is the seam: `motion/` produces it, `game/`
+consumes it, neither knows anything else about the other.
 
-`Wire.version` is not decoration. The phone and the host will be at different
-versions on somebody's sofa, and the handshake has to notice and say which one
-needs updating.
+It is **not** a wire format — nothing leaves the phone. But `Shot` is still
+`Codable` with pinned field names, because fixtures are committed and outlive the
+build that wrote them. A renamed field is a recorded swing nobody can read again.
 
-The wire form, version 1:
+## game/
 
-```jsonc
-{
-  "v": 1,
-  "id": "uuid",
-  "t": 1737630000.123,      // release, device clock
-  "kind": "swing",          // swing | roll | throw
-  "releaseSpeed": 28.9,     // m/s
-  "peakSpeed": 31.4,
-  "direction": [0.98, 0.04, -0.19],  // unit vector, calibrated frame
-  "attitude":  [0.71, 0.0, 0.70, 0.0], // quaternion at release
-  "spinAxis":  [0.1, 0.99, 0.0],
-  "spinRate":  12.3,        // rad/s about spinAxis
-  "tempo": { "back": 0.78, "through": 0.26 },  // seconds
-  "confidence": 0.86
-}
-```
-
-Transport is Network.framework over Bonjour: the host advertises `_swing._tcp`,
-the phone browses and connects. Nothing here is a latency problem — a `Shot` is
-one small message — until the live motion stream that draws the backswing on
-screen, and that is batched rather than one packet every 10 ms.
-
-## Host (`host/`)
-
-A macOS app: SwiftUI, with SceneKit for the play view. Receives `Shot`. Owns:
+SwiftUI. Owns:
 
 - **Sport modules** — one per sport, each a pure mapping from `Shot` to outcome.
-  Golf: launch, spin, carry, run, lie. Bowling: entry angle, pin cascade.
-  Darts: board coordinate.
+  Golf: launch, spin, carry, run, lie. Bowling: entry angle, pin cascade. Darts:
+  board coordinate.
 - **Game loop and rules** — turns, scoring, players.
-- **Rendering.**
-- **Fixture replay** — feed a recorded `Shot` in as though a phone had sent it.
-  Build the entire game with no phone attached.
+- **What you see**, and the shape of the moment after a shot — which is the whole
+  game, because the phone is in your hand and you look at it *after* you swing,
+  not during.
+- **Fixture replay** — feed a recorded `Shot` in as though it had just been
+  swung. Build and tune the entire game sitting down.
 
 ## Testing
 
@@ -103,4 +81,4 @@ A macOS app: SwiftUI, with SceneKit for the play view. Receives `Shot`. Owns:
 | --- | --- |
 | Detection | Replay `fixtures/*.json`, assert the emitted `Shot`. Changes show as a diff in the numbers. |
 | Sport modules | Pure functions. Table tests: this `Shot` in, this outcome out. |
-| End to end | One phone, one host, one human, one evening. Rare, and that is the point. |
+| The feel | One phone, one human, one garden. Rare, irreplaceable, and the only test that actually matters. |

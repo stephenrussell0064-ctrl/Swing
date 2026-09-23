@@ -1,35 +1,34 @@
 # Swing
 
-An iPhone is the controller. You hold it in your hand and swing, roll, or throw it,
-and a game on a nearby screen plays the shot: golf, bowling, darts, and whatever
-else fits in the hand.
+One iPhone. You hold it in your hand and swing, roll, or throw it, and it plays
+the shot: golf, bowling, darts, and whatever else fits in the hand.
 
-The phone does not draw the game. It reads the motion, decides that a swing
-happened, describes that swing in a few numbers, and sends it. Everything else —
-physics, scoring, what you see — happens on the host.
+No second screen. No Mac, no Apple TV, no pairing, nothing to set up. Install it,
+stand up, swing.
 
-## The three pieces
+## The three parts
 
-| Piece | What it is | Lives in |
+| Part | What it is | Lives in |
 | --- | --- | --- |
-| **Controller** | iOS app. Core Motion at 100 Hz, swing detection, calibration, haptics. Sends a `Shot`. | `controller/` |
-| **Protocol** | The `Shot` event and the discovery/handshake rules. The contract between the other two. | `protocol/` |
-| **Host** | Runs the game. Physics, sport rules, scoring, rendering. Receives a `Shot`. | `host/` |
+| **Motion** | Core Motion at 100 Hz, calibration, swing detection, fixture recording. Produces a `Shot`. | `motion/` |
+| **Core** | `SwingCore`: the `Shot` type and the play frame. The seam between the other two. | `core/` |
+| **Game** | Sport rules, physics, scoring, what you see. Consumes a `Shot`. | `game/` |
 
-The protocol is the whole point of the split: once a `Shot` is defined, the
-controller and the host can be built at the same time, on different machines, by
-people who are not in the same room — and tested apart, because a recorded swing
-is just a file.
+The seam is the whole point: `motion/` describes a motion in physics and knows
+nothing about sport; `game/` decides what that motion meant. So a new sport costs
+nothing in the hardest code in the app, and two people can build at once without
+meeting in the same file.
 
 ## Status
 
-Nothing is built yet. Two decisions are still open and are recorded in
-[docs/DECISIONS.md](docs/DECISIONS.md): what the host runs on, and what the
-transport is.
+Early. The scaffold has already been reversed once on something fundamental —
+see the top of [docs/DECISIONS.md](docs/DECISIONS.md), which is worth reading
+before you trust anything else in here. Ziggy's working golf prototype lands
+next, and it is the first real code.
 
 ## Working on this
 
 Two people, two machines, two Claude accounts, one repository. Read
 [docs/COLLABORATION.md](docs/COLLABORATION.md) before your first branch — it is
 short, and it is the difference between this working and this being a merge
-conflict every evening.
+conflict every evening. Then [docs/JOINING.md](docs/JOINING.md) for setup.

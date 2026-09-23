@@ -15,20 +15,19 @@ everything below exists to stop that.
 1. **`main` is protected and nobody commits to it.** Feature branches, pull
    requests, the other person approves. Even for a one-line fix.
 
-2. **You own a directory, not a task.** One of us owns `controller/`, the other
-   owns `host/`. Inside your directory you do not need permission for anything.
+2. **You own a directory, not a task.** One of us owns `motion/`, the other
+   owns `game/`. Inside your directory you do not need permission for anything.
    Outside it you open a PR and wait.
 
-   > **Not yet agreed — settle this first and write the names in.** Both of us
-   > are on Macs with Xcode, so either split works. The natural one is that
-   > whoever is happier standing in the garden waving a phone takes
-   > `controller/`, and whoever wants to argue about ball flight takes `host/`.
-   > Swapping later is fine; doing both at once is not.
+   > **Proposed, not yet agreed — settle it and write the names in.** Ziggy's
+   > prototype already does swing detection, so `motion/` is his unless he says
+   > otherwise, and `game/` is Stephen's. Swapping later is fine; doing both at
+   > once is not.
 
-3. **`protocol/` belongs to both of us.** A change there breaks the other
+3. **`core/` belongs to both of us.** A change to `Shot` breaks the other
    person's work in progress, so it gets its own PR, changes nothing else, and is
    merged before either of us builds on it. If you find yourself editing
-   `protocol/` to make something in your own directory work, stop and say so
+   `core/` to make something in your own directory work, stop and say so
    first.
 
 4. **Pull before you prompt.** Start every session with `git pull` on a fresh
@@ -44,16 +43,16 @@ everything below exists to stop that.
 
 ## Fixtures: how we work without being in the same room
 
-The host developer does not need a phone, and the controller developer does not
-need a working game.
+The game developer does not need to swing a phone all day, and the detection
+developer does not need a working game.
 
-The controller records real motion to `fixtures/*.json` — a full 100 Hz trace of
+`motion/` records real motion to `fixtures/*.json` — a full 100 Hz trace of
 an actual golf swing, an actual bowling roll, an actual dart throw, plus the
-`Shot` the controller decided to emit from it. Those files are committed.
+`Shot` detection decided to emit from it. Those files are committed.
 
-The host replays them. `host` gets a mode that reads a fixture and feeds it in as
-if a phone had just sent it. So the host can be built, tuned and demoed with no
-phone in the building, and a change to swing detection can be proven against
+`game/` replays them. It gets a mode that reads a fixture and feeds it in as
+if it had just been swung. So the game can be built, tuned and demoed sitting
+down, and a change to swing detection can be proven against
 every swing we have ever recorded instead of against whatever one of us can do in
 the kitchen.
 
