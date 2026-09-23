@@ -1,0 +1,18 @@
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+.swiftpm/
+
+# Node
+node_modules/
+dist/
+
+# Local, per-person, never shared
+.env
+.env.local
+.claude/settings.local.json
