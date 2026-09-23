@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# Refuses a push to main. CLAUDE.md rule 1, enforced locally because GitHub will
+# not enforce it for us on a free private repository.
+#
+# Not security — it is on your own machine and you can switch it off. It is
+# there for the evening you are tired, an agent has just written forty files,
+# and you are on main without having noticed.
+#
+# Each of us has to turn it on once, per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# Genuinely need to push to main (first push, fixing a mistake)? Use
+# `git push --no-verify`, and say so to the other one.
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	case "$remote_ref" in
+	refs/heads/main)
+		echo "pre-push: refusing to push to main." >&2
+		echo "" >&2
+		echo "  Branch, then open a pull request. See CLAUDE.md." >&2
+		echo "  git switch -c <yourname>/<what-it-does>" >&2
+		echo "" >&2
+		echo "  If you really mean it: git push --no-verify" >&2
+		exit 1
+		;;
+	esac
+done
+
+exit 0
