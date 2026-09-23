@@ -3,15 +3,19 @@ import Foundation
 /// One motion of the hand, described in physics.
 ///
 /// Deliberately says nothing about sport. There is no club here, no ball, no
-/// board — the host decides whether these numbers are a drive, a strike or
+/// board — `game/` decides whether these numbers are a drive, a strike or
 /// double top. Adding a sport must never require adding a field here.
+///
+/// This is the seam between the two halves of the app: `motion/` produces it,
+/// `game/` consumes it, and neither needs to know anything else about the
+/// other. It is not a network message — nothing leaves the phone.
 ///
 /// Every quantity is in the play frame described on ``Vector3``, in SI units,
 /// measured at **release**: the moment of maximum speed, just before the sharp
 /// deceleration that ends the motion.
 public struct Shot: Hashable, Sendable, Identifiable {
 
-    /// What the hand did. The host maps this to a sport; the controller uses it
+    /// What the hand did. `game/` maps this to a sport; `motion/` uses it
     /// only to pick which detector ran.
     public enum Kind: String, Codable, Sendable, CaseIterable {
         /// Fast rotation about the body. Golf, tennis, a baseball bat.
@@ -39,9 +43,14 @@ public struct Shot: Hashable, Sendable, Identifiable {
         }
     }
 
+    /// Bump when a change would make an older *recorded fixture* misread —
+    /// a field whose meaning changed, not a field added with a sane default.
+    /// Fixtures outlive builds; that is the only reason this number exists.
+    public static let currentVersion = 1
+
     public var version: Int
     public var id: UUID
-    /// Release, on the controller's clock, seconds since the reference date.
+    /// Release, seconds since the reference date.
     public var timestamp: TimeInterval
     public var kind: Kind
     /// Speed at release, m/s.
@@ -61,11 +70,11 @@ public struct Shot: Hashable, Sendable, Identifiable {
     public var spinRate: Double
     public var tempo: Tempo
     /// How sure the detector is that this was a real, complete motion, 0...1.
-    /// The host may want to ask rather than score a shot it does not believe in.
+    /// `game/` may want to ask again rather than score a shot it does not believe in.
     public var confidence: Double
 
     public init(
-        version: Int = Wire.version,
+        version: Int = Shot.currentVersion,
         id: UUID = UUID(),
         timestamp: TimeInterval,
         kind: Kind,

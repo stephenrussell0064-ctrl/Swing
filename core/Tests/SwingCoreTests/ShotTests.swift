@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SwingProtocol
+@testable import SwingCore
 
 private let shot = Shot(
     id: UUID(uuidString: "0B5B9A1E-5E5F-4C7A-9E31-2E9F1C7A8D40")!,
@@ -25,7 +25,7 @@ struct ShotCodingTests {
         #expect(try JSONDecoder().decode(Shot.self, from: data) == shot)
     }
 
-    @Test("vectors are arrays on the wire, not objects")
+    @Test("vectors are arrays on disk, not objects")
     func vectorsEncodeAsArrays() throws {
         let json = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(shot)
@@ -33,14 +33,15 @@ struct ShotCodingTests {
 
         #expect(json["direction"] as? [Double] == [0.98, 0.04, -0.19])
         #expect(json["attitude"] as? [Double] == [0.71, 0, 0.70, 0])
-        #expect(json["v"] as? Int == Wire.version)
+        #expect(json["v"] as? Int == Shot.currentVersion)
         #expect(json["kind"] as? String == "swing")
     }
 
-    /// The controller and the host are two apps shipped separately. A field the
-    /// phone renames is a field the host silently loses, so the wire names are
-    /// pinned here rather than left to the compiler.
-    @Test("wire field names are fixed")
+    /// Nothing leaves the phone, so these names are not a wire contract — but
+    /// fixtures are committed and outlive the build that wrote them. A renamed
+    /// field is a recorded swing we can no longer read, and the whole point of
+    /// keeping them is that they still load in a year.
+    @Test("field names on disk are fixed")
     func fieldNames() throws {
         let json = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(shot)
@@ -54,35 +55,32 @@ struct ShotCodingTests {
             ]
         )
     }
-}
 
-@Suite("Version negotiation")
-struct VersionTests {
+    @Test("a fixture round-trips with its samples and its expected Shot")
+    func fixtureRoundTrip() throws {
+        let fixture = Fixture(
+            id: "driver-thin-01",
+            recordedAt: Date(timeIntervalSince1970: 1_758_585_600),
+            note: "Full driver, caught it thin.",
+            deviceModel: "iPhone17,1",
+            samples: [
+                MotionSample(
+                    t: 0,
+                    attitude: .identity,
+                    rotationRate: Vector3(0.1, 0, 0),
+                    userAcceleration: Vector3(0, 0, 0),
+                    gravity: Vector3(0, -1, 0)
+                )
+            ],
+            expected: shot
+        )
 
-    @Test("accepts a peer inside the supported range")
-    func acceptsCurrent() {
-        #expect(Wire.supports(Wire.version))
-        #expect(Wire.supports(Wire.minimumSupportedVersion))
-    }
+        let data = try JSONEncoder().encode(fixture)
+        let decoded = try JSONDecoder().decode(Fixture.self, from: data)
 
-    @Test("refuses a peer outside it")
-    func refusesOutside() {
-        #expect(!Wire.supports(Wire.minimumSupportedVersion - 1))
-        #expect(!Wire.supports(Wire.version + 1))
-    }
-
-    @Test("messages round-trip with their case intact")
-    func messageRoundTrip() throws {
-        let sent = Wire.ControllerMessage.shot(shot)
-        let data = try JSONEncoder().encode(sent)
-
-        guard case .shot(let received) = try JSONDecoder()
-            .decode(Wire.ControllerMessage.self, from: data)
-        else {
-            Issue.record("decoded as the wrong case")
-            return
-        }
-        #expect(received == shot)
+        #expect(decoded == fixture)
+        #expect(decoded.expected == shot)
+        #expect(decoded.samples.count == 1)
     }
 }
 

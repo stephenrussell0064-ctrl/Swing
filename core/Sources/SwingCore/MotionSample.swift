@@ -3,7 +3,7 @@ import Foundation
 /// One tick of Core Motion, 100 per second.
 ///
 /// Mirrors `CMDeviceMotion` so that a recorded trace and a live reading are the
-/// same thing. The controller keeps a few seconds of these in a ring buffer,
+/// same thing. `motion/` keeps a few seconds of these in a ring buffer,
 /// because a swing is only recognisable after it has finished.
 public struct MotionSample: Hashable, Codable, Sendable {
     /// Seconds since the start of the recording, not a wall clock. Traces have
@@ -34,9 +34,9 @@ public struct MotionSample: Hashable, Codable, Sendable {
     }
 }
 
-/// A recorded motion and the ``Shot`` the controller made of it.
+/// A recorded motion and the ``Shot`` `motion/` made of it.
 ///
-/// These are committed to `fixtures/`. They are how the host is built with no
+/// These are committed to `fixtures/`. They are how `game/` is built with no
 /// phone in the room, and how a change to swing detection is shown to do
 /// something: re-run the fixtures, and the numbers that moved are the diff.
 public struct Fixture: Hashable, Codable, Sendable {
