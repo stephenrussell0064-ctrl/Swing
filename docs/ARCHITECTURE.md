@@ -44,7 +44,24 @@ trace. This is a debug feature that is really the test suite.
 
 ## Protocol (`protocol/`)
 
-Draft `Shot`, version 1 — expect this to move before anything is built:
+A Swift package, `SwingProtocol`, imported by both the controller and the host.
+One definition of `Shot`, so the schema cannot drift between two apps that ship
+separately.
+
+- `Shot` — the event, and `Shot.Kind`: swing, roll, throw.
+- `Vector3`, `Quaternion` — the play frame, and the convention that fixes it.
+- `MotionSample` — one Core Motion tick. `Fixture` — a recorded trace plus the
+  `Shot` made of it.
+- `Wire` — version negotiation, the Bonjour service type, and the two message
+  enums. `Wire.ControllerMessage` only ever goes phone → host and
+  `Wire.HostMessage` only ever goes host → phone; the types say so, so neither
+  side can accidentally send the other's traffic.
+
+`Wire.version` is not decoration. The phone and the host will be at different
+versions on somebody's sofa, and the handshake has to notice and say which one
+needs updating.
+
+The wire form, version 1:
 
 ```jsonc
 {
@@ -63,16 +80,14 @@ Draft `Shot`, version 1 — expect this to move before anything is built:
 }
 ```
 
-Also here: discovery and handshake (how a phone finds the host on the LAN and
-agrees a protocol version), and the optional live motion stream used to draw the
-backswing on screen as it happens.
-
-`v` is not decoration. The phone and the host will be at different versions on
-someone's sofa at some point, and the handshake has to notice.
+Transport is Network.framework over Bonjour: the host advertises `_swing._tcp`,
+the phone browses and connects. Nothing here is a latency problem — a `Shot` is
+one small message — until the live motion stream that draws the backswing on
+screen, and that is batched rather than one packet every 10 ms.
 
 ## Host (`host/`)
 
-Receives `Shot`. Owns:
+A macOS app: SwiftUI, with SceneKit for the play view. Receives `Shot`. Owns:
 
 - **Sport modules** — one per sport, each a pure mapping from `Shot` to outcome.
   Golf: launch, spin, carry, run, lie. Bowling: entry angle, pin cascade.

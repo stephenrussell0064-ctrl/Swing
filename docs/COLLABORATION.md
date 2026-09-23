@@ -19,6 +19,12 @@ everything below exists to stop that.
    owns `host/`. Inside your directory you do not need permission for anything.
    Outside it you open a PR and wait.
 
+   > **Not yet agreed — settle this first and write the names in.** Both of us
+   > are on Macs with Xcode, so either split works. The natural one is that
+   > whoever is happier standing in the garden waving a phone takes
+   > `controller/`, and whoever wants to argue about ball flight takes `host/`.
+   > Swapping later is fine; doing both at once is not.
+
 3. **`protocol/` belongs to both of us.** A change there breaks the other
    person's work in progress, so it gets its own PR, changes nothing else, and is
    merged before either of us builds on it. If you find yourself editing

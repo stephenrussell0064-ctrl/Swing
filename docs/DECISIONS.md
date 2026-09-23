@@ -9,30 +9,34 @@ our mind.
 
 ---
 
-## OPEN — What does the host run on?
+## 2026-09-23 — The host is a macOS app, and the protocol is a Swift package
 
-Blocks: the host language, whether a physics core can be shared with the phone,
-and where the game is actually played.
+SwiftUI, with SceneKit for the play view. Both of us are on Macs with Xcode, so
+Swift on both sides costs nothing and buys the thing that matters: `protocol/` is
+one package that the phone and the host both import, and the `Shot` schema
+therefore cannot drift. A web host would have meant defining `Shot` twice and
+writing a test to keep the two honest.
 
-- **macOS app** (SwiftUI + SceneKit/RealityKit). Swift on both sides, so
-  `protocol/` becomes a Swift package both targets import and the schema cannot
-  drift. Needs both of us on a Mac with Xcode.
-- **Web** (TypeScript + Three.js, served on the LAN). Runs on any screen with a
-  browser, including a TV. Lets a collaborator without a Mac own the whole host.
-  Cost: the `Shot` schema exists twice, in Swift and in TypeScript, and has to be
-  kept honest by a test.
-- **tvOS.** The best living-room answer and the worst development loop. Later,
-  not first.
+Considered: a LAN web page (Three.js) — the right answer only if one of us could
+not build for iOS; tvOS — the best living-room feel and the worst development
+loop.
 
-## OPEN — Transport
+Would change our mind: wanting to play on a TV without an Apple TV, or a third
+person joining who is not on a Mac. Neither is true today. The sport modules are
+pure functions over a `Shot`, so a second front end later is a rendering job, not
+a rewrite.
 
-Not urgent: a `Shot` is one small message, so nothing here is a latency problem.
-It becomes one only if we stream live motion to draw the backswing on screen.
+## 2026-09-23 — Transport is Network.framework over Bonjour
 
-- Network.framework + Bonjour (`_swing._tcp`) if the host is Swift.
-- WebSocket over the LAN if the host is web.
-- Multipeer Connectivity — phone-to-phone without a network, worth remembering if
-  two players on two phones ever matters.
+Service type `_swing._tcp`. The phone browses, finds the host, handshakes on
+protocol version.
+
+A `Shot` is one small message, so this was never a latency decision — it becomes
+one only for the live motion stream that draws the backswing on screen, and
+Network.framework handles that on a LAN without trying.
+
+Considered: Multipeer Connectivity, which needs no network at all. Worth
+remembering if two phones playing each other ever matters.
 
 ---
 
