@@ -16,3 +16,9 @@ dist/
 .env
 .env.local
 .claude/settings.local.json
+
+# Local agent-tooling state. Machine-specific, and a pid file in a shared repo
+# is a merge conflict that means nothing.
+.claude-flow/
+.claude/.proven-config-version
+.claude/proven-config.json
