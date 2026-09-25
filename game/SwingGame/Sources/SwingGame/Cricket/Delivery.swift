@@ -13,25 +13,20 @@ public struct Delivery: Hashable, Sendable {
         case fast, medium, spin
 
         /// The grid. Seconds between beats, and between the last beat and
-        /// contact.
+        /// contact. Slower than a real ball's flight, on purpose: the first
+        /// phone test at 0.46 s could not be locked on to cold. Speed is the
+        /// knob to turn once the grid is learned, not before.
         public var beat: TimeInterval {
             switch self {
-            case .fast: 0.46
-            case .medium: 0.55
-            case .spin: 0.70
+            case .fast: 0.58
+            case .medium: 0.68
+            case .spin: 0.80
             }
         }
 
-        /// Beats in the count-in, including the accented last one. Enough to
-        /// lock on to the rhythm; a quick bowler gets one more because the
-        /// interval is harder to feel.
-        public var beats: Int {
-            switch self {
-            case .fast: 4
-            case .medium: 4
-            case .spin: 3
-            }
-        }
+        /// Beats in the count-in, including the accented last one. Four,
+        /// always: three to hear the interval, one to confirm it.
+        public var beats: Int { 4 }
     }
 
     public enum Length: String, Hashable, Sendable, CaseIterable {
@@ -82,6 +77,9 @@ public struct Delivery: Hashable, Sendable {
     public func script() -> HapticScript {
         HapticScript.countIn(beats: bowler.beats, interval: bowler.beat)
     }
+
+    /// The ball to learn the grid on: medium pace, straight, good length.
+    public static let practice = Delivery(bowler: .medium, line: 0, length: .good, pace: 30)
 }
 
 extension Delivery {

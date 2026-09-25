@@ -48,10 +48,10 @@ final class HapticPlayer {
             playFallback(script, at: start)
             return
         }
-        let events = script.entries.map { entry -> CHHapticEvent in
+        let events = script.entries.flatMap { entry -> [CHHapticEvent] in
             switch entry.event {
             case .tap(let intensity, let sharpness):
-                return CHHapticEvent(
+                let transient = CHHapticEvent(
                     eventType: .hapticTransient,
                     parameters: [
                         CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(intensity)),
@@ -59,8 +59,36 @@ final class HapticPlayer {
                     ],
                     relativeTime: entry.at
                 )
+                // A lone transient is a flick; in a gripping hand it barely
+                // registers. Strong taps get a short continuous burst under
+                // them so they land as a thump, and the accent gets a second
+                // transient so it is unmistakably different from a beat.
+                guard intensity >= 0.85 else { return [transient] }
+                var events = [
+                    transient,
+                    CHHapticEvent(
+                        eventType: .hapticContinuous,
+                        parameters: [
+                            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+                            CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(sharpness)),
+                        ],
+                        relativeTime: entry.at,
+                        duration: 0.07
+                    ),
+                ]
+                if entry.event == HapticVocabulary.accent {
+                    events.append(CHHapticEvent(
+                        eventType: .hapticTransient,
+                        parameters: [
+                            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+                            CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
+                        ],
+                        relativeTime: entry.at + 0.09
+                    ))
+                }
+                return events
             case .rumble(let duration, let from, _):
-                return CHHapticEvent(
+                return [CHHapticEvent(
                     eventType: .hapticContinuous,
                     parameters: [
                         CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(from)),
@@ -68,7 +96,7 @@ final class HapticPlayer {
                     ],
                     relativeTime: entry.at,
                     duration: duration
-                )
+                )]
             }
         }
         // Rumbles ramp with a parameter curve on intensity.

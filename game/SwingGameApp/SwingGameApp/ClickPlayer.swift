@@ -26,7 +26,6 @@ final class ClickPlayer {
     /// in `Date.timeIntervalSinceReferenceDate` seconds.
     func schedule(_ script: HapticScript, at start: TimeInterval) {
         guard !isMuted else { return }
-        live.removeAll { !$0.isPlaying && $0.currentTime == 0 && $0.deviceCurrentTime > 0 && $0.isPlaying == false && $0.duration > 0 && $0.currentTime >= $0.duration }
         let now = Date.timeIntervalSinceReferenceDate
         for entry in script.entries {
             guard case .tap = entry.event else { continue }

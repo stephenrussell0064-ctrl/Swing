@@ -37,13 +37,13 @@ public struct IncomingBall: Hashable, Sendable {
     static let netDistance = courtLength / 2
     static let serviceLine = netDistance + 6.4
 
-    /// The grid. A 20 m/s rally ball is a comfortable 0.6 s beat; a 32 m/s
-    /// drive is 0.45.
+    /// The grid. A 20 m/s rally ball is a comfortable 0.75 s beat; a 32 m/s
+    /// drive is 0.5. Slow on purpose until the grid is learned.
     public var beat: TimeInterval {
-        (13.0 / max(pace, 10)).clamped(to: 0.42...0.68)
+        (15.0 / max(pace, 10)).clamped(to: 0.5...0.75)
     }
 
-    public var beats: Int { isServe ? 4 : 3 }
+    public var beats: Int { 4 }
 
     public var tolerance: TimeInterval {
         HapticVocabulary.tolerance(forBeat: beat)
@@ -73,9 +73,9 @@ public struct IncomingBall: Hashable, Sendable {
 
 /// Your own serve. Nothing is coming; the count is your toss.
 public enum Serve {
-    public static let beat: TimeInterval = 0.6
-    /// Three beats and hit on the fourth: "and, two, three, serve".
-    public static let script = HapticScript.countIn(beats: 3, interval: beat)
+    public static let beat: TimeInterval = 0.7
+    /// Four beats and hit on the fifth, like everything else.
+    public static let script = HapticScript.countIn(beats: 4, interval: beat)
     /// Self-paced, so generous.
     public static let tolerance: TimeInterval = HapticVocabulary.tolerance(forBeat: beat) + 0.04
     /// Racket height at contact on a serve, metres.

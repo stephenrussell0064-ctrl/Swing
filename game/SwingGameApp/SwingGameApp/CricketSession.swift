@@ -58,11 +58,25 @@ final class CricketSession {
         start()
     }
 
+    /// Balls before the match that only report timing. The grid has to be
+    /// learned before it can be scored.
+    private let practiceBalls = 3
+
     private func run() async {
+        announcer.say("Three practice balls first. Four beats, the last one high. Swing so you meet the beat after the high one.")
+        headline = "Practice"
+        detail = "Beat, beat, beat, BEAT — and swing."
+        try? await Task.sleep(for: .seconds(6.5))
+
+        for n in 1...practiceBalls where !Task.isCancelled {
+            await practice(n)
+        }
+        if Task.isCancelled { return }
+
         announcer.say(match.phaseAnnouncement)
         headline = "You're batting"
-        detail = "Count the beats. Swing on the one after the high one."
-        try? await Task.sleep(for: .seconds(4.5))
+        detail = "Same count. Now it counts."
+        try? await Task.sleep(for: .seconds(4))
 
         while !Task.isCancelled {
             switch match.phase {
@@ -78,6 +92,38 @@ final class CricketSession {
                 return
             }
         }
+    }
+
+    private func practice(_ n: Int) async {
+        let delivery = Delivery.practice
+        let script = delivery.script()
+        let start = Date.timeIntervalSinceReferenceDate + 1.0
+        let cue = Cue(script: script, startingAt: start, tolerance: delivery.tolerance)
+        inbox.clear()
+        headline = "Practice \(n) of \(practiceBalls)"
+        detail = "Beat, beat, beat, BEAT — and swing."
+        haptics.play(script, at: start)
+        clicks.schedule(script, at: start)
+
+        let answer = await inbox.shot(for: cue, notBefore: start)
+        if Task.isCancelled { return }
+        let words: String
+        if let shot = answer?.shot {
+            let timing = cue.timing(of: shot)
+            words = timing.feedback ?? "Timed it."
+            detail = String(format: "%+.0f ms", timing.error * 1000)
+            haptics.play(timing.missed ? HapticVocabulary.miss : HapticVocabulary.cleanStrike)
+            fixtures.save(
+                shot, trace: answer?.trace ?? [], prefix: "cricket-practice",
+                note: "Practice ball \(n), medium grid \(delivery.bowler.beat) s. Timing \(String(format: "%+.3f s", timing.error)). Game said: \(words)"
+            )
+        } else {
+            words = "No swing."
+            haptics.play(HapticVocabulary.miss)
+        }
+        announcer.sayNow(words)
+        headline = words
+        try? await Task.sleep(for: .seconds(2.5))
     }
 
     private func bat() async {

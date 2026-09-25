@@ -48,6 +48,12 @@ final class StandInDetector: ShotSource {
         case idle
         case moving(start: Int)
         case swinging(start: Int, peakOmega: Double, peakOmegaAt: Int)
+        /// Rotation has dropped after a peak. A real swing passes through
+        /// near-zero rotation at the top of the backswing, so this is not yet
+        /// the end: if it picks up again within `settleTime` it is the same
+        /// motion and the bigger peak wins. Only after the quiet holds is the
+        /// motion over.
+        case settling(start: Int, peakOmega: Double, peakOmegaAt: Int, since: TimeInterval)
     }
     private var state = State.idle
     private var velocity = SIMD3<Double>.zero
@@ -61,6 +67,10 @@ final class StandInDetector: ShotSource {
     private let swingOmega = 5.0
     private let releaseFraction = 0.35
     private let velocityLeak = 0.998
+    /// How long rotation has to stay low before a motion counts as finished.
+    /// Longer than the pause at the top of a backswing, shorter than the gap
+    /// between two balls.
+    private let settleTime: TimeInterval = 0.22
 
     func start() {
         guard manager.isDeviceMotionAvailable else {
@@ -179,14 +189,27 @@ final class StandInDetector: ShotSource {
                 peakAt = i
             }
             let sincePeak = raw.wall - buffer[peakAt].wall
-            let ended = omega < peakOmega * releaseFraction && sincePeak > 0.05
-            let tooLong = raw.wall - buffer[start].wall > 2.5
-            if ended || tooLong {
+            let dropped = omega < peakOmega * releaseFraction && sincePeak > 0.05
+            let tooLong = raw.wall - buffer[start].wall > 3
+            if tooLong {
                 emit(start: start, end: i, peakOmega: peakOmega, peakOmegaAt: peakAt)
                 state = .idle
                 status = "Ready"
+            } else if dropped {
+                state = .settling(start: start, peakOmega: peakOmega, peakOmegaAt: peakAt, since: raw.wall)
             } else {
                 state = .swinging(start: start, peakOmega: peakOmega, peakOmegaAt: peakAt)
+            }
+
+        case .settling(let start, let peakOmega, let peakAt, let since):
+            integrate(raw, dt: dt)
+            if omega > peakOmega * releaseFraction {
+                // It was the top of the backswing. Same motion, keep going.
+                state = .swinging(start: start, peakOmega: max(peakOmega, omega), peakOmegaAt: omega > peakOmega ? i : peakAt)
+            } else if raw.wall - since >= settleTime {
+                emit(start: start, end: i, peakOmega: peakOmega, peakOmegaAt: peakAt)
+                state = .idle
+                status = "Ready"
             }
         }
     }
@@ -202,6 +225,7 @@ final class StandInDetector: ShotSource {
         case .idle: break
         case .moving(let s): state = .moving(start: max(0, s + delta))
         case .swinging(let s, let p, let at): state = .swinging(start: max(0, s + delta), peakOmega: p, peakOmegaAt: max(0, at + delta))
+        case .settling(let s, let p, let at, let since): state = .settling(start: max(0, s + delta), peakOmega: p, peakOmegaAt: max(0, at + delta), since: since)
         }
     }
 

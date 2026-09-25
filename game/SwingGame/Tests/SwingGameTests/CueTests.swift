@@ -98,7 +98,7 @@ struct HapticScriptTests {
         let fs = fh.script(), bs = bh.script()
         #expect(fs.entries.filter { $0.event == HapticVocabulary.tick }.count == 1)
         #expect(bs.entries.filter { $0.event == HapticVocabulary.tick }.count == 2)
-        #expect(fs.entries.filter { $0.event == HapticVocabulary.beat }.count == 2)
+        #expect(fs.entries.filter { $0.event == HapticVocabulary.beat }.count == fh.beats - 1)
         #expect(fs.entries.last!.event == HapticVocabulary.accent)
         #expect(abs(fs.contactAt - (fs.entries.last!.at + fh.beat)) < 1e-9)
         // The beats start after the side call, with time to move the hand.
@@ -110,17 +110,18 @@ struct HapticScriptTests {
         let soft = IncomingBall(side: .forehand, pace: 18, depth: 0.5)
         let hard = IncomingBall(side: .forehand, pace: 34, depth: 0.5)
         #expect(soft.beat > hard.beat)
-        #expect(hard.beat >= 0.42)
-        #expect(soft.beat <= 0.68)
+        #expect(hard.beat >= 0.5)
+        #expect(soft.beat <= 0.75)
     }
 
-    @Test("their serve has no side call and a longer count")
+    @Test("their serve has no side call; every count is four beats")
     func serveScript() {
         let s = IncomingBall(side: .forehand, pace: 30, depth: 0.8, isServe: true).script()
         #expect(!s.entries.contains { $0.event == HapticVocabulary.tick })
         #expect(s.entries.count == 4)
-        #expect(Serve.script.entries.count == 3)
+        #expect(Serve.script.entries.count == 4)
         #expect(Serve.script.entries.last!.event == HapticVocabulary.accent)
+        #expect(abs(Serve.script.contactAt - 4 * Serve.beat) < 1e-9)
     }
 
     @Test("script entries are kept in time order however they were given")
