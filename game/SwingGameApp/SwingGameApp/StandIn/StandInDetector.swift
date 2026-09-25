@@ -70,7 +70,11 @@ final class StandInDetector: ShotSource {
         manager.deviceMotionUpdateInterval = 1.0 / 100
         queue.maxConcurrentOperationCount = 1
         let bootToWall = Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
-        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] motion, _ in
+        // `@Sendable` matters: without it, a closure formed inside this
+        // main-actor method is main-actor-isolated, and Core Motion calling it
+        // on its own queue trips the Swift 6 runtime isolation check (SIGTRAP).
+        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { @Sendable [weak self] motion, error in
+            if let error { NSLog("swing: device motion error \(error)") }
             guard let motion else { return }
             let q = motion.attitude.quaternion
             let attitude = simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w)
@@ -178,7 +182,7 @@ final class StandInDetector: ShotSource {
             let ended = omega < peakOmega * releaseFraction && sincePeak > 0.05
             let tooLong = raw.wall - buffer[start].wall > 2.5
             if ended || tooLong {
-                emit(start: start, end: i, peakOmega: peakOmega)
+                emit(start: start, end: i, peakOmega: peakOmega, peakOmegaAt: peakAt)
                 state = .idle
                 status = "Ready"
             } else {
@@ -201,12 +205,14 @@ final class StandInDetector: ShotSource {
         }
     }
 
-    private func emit(start: Int, end: Int, peakOmega: Double) {
+    private func emit(start: Int, end: Int, peakOmega: Double, peakOmegaAt: Int) {
         guard let frame, end > start, !speeds.isEmpty else { return }
-        // Release: fastest hand speed in the window. Fall back to peak
-        // rotation if the accelerometer gave us nothing to integrate.
-        let releaseOffset = speeds.indices.max { speeds[$0] < speeds[$1] } ?? speeds.count - 1
-        let releaseIndex = min(start + releaseOffset, end)
+        // Release: the moment of peak rotation. The gyroscope is the honest
+        // sensor here — integrated acceleration drifts, and a bat or racket is
+        // turning fastest at the moment it would meet the ball. Speed and
+        // direction still come from the integrated velocity at that moment.
+        let releaseIndex = min(max(peakOmegaAt, start), end)
+        let releaseOffset = min(releaseIndex - start, speeds.count - 1)
         let releaseRaw = buffer[releaseIndex]
         let v = velocities[min(releaseOffset, velocities.count - 1)]
         let releaseSpeed = simd_length(v)

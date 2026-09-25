@@ -14,8 +14,25 @@
 		5A1000000000000000000010 /* SwingGameApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwingGameApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5A1000000000000000000021 /* Exceptions for "SwingGameApp" folder in "SwingGameApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5A1000000000000000000050 /* SwingGameApp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5A1000000000000000000020 /* SwingGameApp */ = {isa = PBXFileSystemSynchronizedRootGroup; path = SwingGameApp; sourceTree = "<group>"; };
+		5A1000000000000000000020 /* SwingGameApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5A1000000000000000000021 /* Exceptions for "SwingGameApp" folder in "SwingGameApp" target */,
+			);
+			path = SwingGameApp;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -198,6 +215,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwingGameApp/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSMotionUsageDescription = "Swing reads how you move the phone. That is the whole game.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -225,6 +243,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwingGameApp/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSMotionUsageDescription = "Swing reads how you move the phone. That is the whole game.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

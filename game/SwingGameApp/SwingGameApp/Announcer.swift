@@ -11,7 +11,9 @@ final class Announcer {
 
     init() {
         voice = AVSpeechSynthesisVoice(language: "en-GB")
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        // `.default` mode, not `.spokenAudio`: the same session carries the
+        // count-in clicks, and spoken-audio processing adds latency to them.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 

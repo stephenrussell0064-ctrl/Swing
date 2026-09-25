@@ -3,29 +3,33 @@ import SwingCore
 
 /// One ball, bowled at the player.
 ///
-/// The player cannot see it. What they get is a haptic script: the bowler's
-/// run-up as a quickening count, a soft tap at release, a hard tap at the
-/// bounce, and then silence — the swing goes into the silence, exactly as a
-/// real one is timed off the bounce.
+/// The player cannot see it. What they get is a count-in: the bowler's
+/// footsteps as evenly spaced beats, the last one accented (the bounce), and
+/// contact exactly one beat later. A quick bowler's beat is short; a spinner's
+/// is long. Everything the hand needs is in the interval.
 public struct Delivery: Hashable, Sendable {
 
     public enum Bowler: String, Hashable, Sendable, CaseIterable {
         case fast, medium, spin
 
-        /// Run-up length in seconds. A spinner ambles; a quick bowler charges.
-        var runUp: TimeInterval {
+        /// The grid. Seconds between beats, and between the last beat and
+        /// contact.
+        public var beat: TimeInterval {
             switch self {
-            case .fast: 1.8
-            case .medium: 1.4
-            case .spin: 0.9
+            case .fast: 0.46
+            case .medium: 0.55
+            case .spin: 0.70
             }
         }
 
-        var steps: Int {
+        /// Beats in the count-in, including the accented last one. Enough to
+        /// lock on to the rhythm; a quick bowler gets one more because the
+        /// interval is harder to feel.
+        public var beats: Int {
             switch self {
-            case .fast: 5
+            case .fast: 4
             case .medium: 4
-            case .spin: 2
+            case .spin: 3
             }
         }
     }
@@ -43,19 +47,6 @@ public struct Delivery: Hashable, Sendable {
             case .fullToss: "full toss"
             }
         }
-
-        /// Where along the flight the ball pitches, 0 = at release, 1 = at
-        /// the bat. A yorker bounces at your feet; a short ball bounces early
-        /// and comes up at you.
-        var bounceFraction: Double {
-            switch self {
-            case .short: 0.45
-            case .good: 0.62
-            case .full: 0.78
-            case .yorker: 0.94
-            case .fullToss: 1.0
-            }
-        }
     }
 
     public var bowler: Bowler
@@ -63,7 +54,8 @@ public struct Delivery: Hashable, Sendable {
     /// off side. Stumps are 0.23 m wide; anything within ±0.15 hits them.
     public var line: Double
     public var length: Length
-    /// m/s at release. Fast 35–40, medium 28–33, spin 18–24.
+    /// m/s at release. Fast 35–40, medium 28–33, spin 18–24. Affects how hard
+    /// the ball comes off the bat; the *timing* is the bowler's beat.
     public var pace: Double
 
     public init(bowler: Bowler, line: Double, length: Length, pace: Double) {
@@ -77,16 +69,8 @@ public struct Delivery: Hashable, Sendable {
     /// less the bowler's stride and the batter's stance.
     static let flightDistance = 17.5
 
-    /// Release to bat. The ball loses speed off the pitch, so it is a little
-    /// slower than distance over pace.
-    public var flightTime: TimeInterval {
-        Delivery.flightDistance / max(pace, 5) * 1.12
-    }
-
-    /// A slower ball is easier to time — the window scales with flight time,
-    /// clamped so a spinner is not trivially easy and a quick is possible.
     public var tolerance: TimeInterval {
-        (flightTime * 0.17).clamped(to: 0.09...0.17)
+        HapticVocabulary.tolerance(forBeat: bowler.beat)
     }
 
     public var isStraight: Bool { abs(line) <= 0.15 }
@@ -96,21 +80,7 @@ public struct Delivery: Hashable, Sendable {
 
     /// What the hand feels between "here it comes" and the moment to swing.
     public func script() -> HapticScript {
-        var entries: [HapticScript.Entry] = []
-        // Run-up: taps that get closer together, like footsteps speeding up.
-        let steps = bowler.steps
-        for i in 0..<steps {
-            let f = Double(i) / Double(steps)
-            // Ease-in: the gaps shrink as the bowler nears the crease.
-            let at = bowler.runUp * (1 - (1 - f) * (1 - f))
-            entries.append(.init(at: at, event: HapticVocabulary.tick))
-        }
-        let release = bowler.runUp
-        entries.append(.init(at: release, event: HapticVocabulary.released))
-        if length != .fullToss {
-            entries.append(.init(at: release + flightTime * length.bounceFraction, event: HapticVocabulary.bounce))
-        }
-        return HapticScript(entries: entries, contactAt: release + flightTime)
+        HapticScript.countIn(beats: bowler.beats, interval: bowler.beat)
     }
 }
 

@@ -4,9 +4,9 @@ import SwingCore
 /// A ball coming at the player from across the net.
 ///
 /// The screen is in the player's hand, so the ball is described to the hand:
-/// which side it is coming to (one tick forehand, two ticks backhand), a soft
-/// tap as it leaves the opponent's racket, a hard tap at the bounce, and then
-/// silence to swing into.
+/// which side it is coming to (one tick forehand, two ticks backhand), then a
+/// count-in of three beats, the last accented, and contact one beat later.
+/// A harder-hit ball is a shorter beat.
 public struct IncomingBall: Hashable, Sendable {
 
     public enum Side: String, Hashable, Sendable, CaseIterable {
@@ -16,10 +16,11 @@ public struct IncomingBall: Hashable, Sendable {
     public var side: Side
     /// m/s off the opponent's racket. A rally ball is 18–28; a hard hit is 32+.
     public var pace: Double
-    /// Where it lands, 0 at the service line, 1 on the baseline.
+    /// Where it lands, 0 at the service line, 1 on the baseline. Affects how
+    /// it plays off the racket, not the count.
     public var depth: Double
     /// True for the opponent's serve: no side warning, because you know where
-    /// a serve comes from, but a longer toss-to-hit lead-in.
+    /// a serve comes from, but a longer count.
     public var isServe: Bool
 
     public init(side: Side, pace: Double, depth: Double, isServe: Bool = false) {
@@ -36,41 +37,31 @@ public struct IncomingBall: Hashable, Sendable {
     static let netDistance = courtLength / 2
     static let serviceLine = netDistance + 6.4
 
-    /// Racket to racket, allowing for the arc and the bounce.
-    public var flightTime: TimeInterval {
-        IncomingBall.courtLength / max(pace, 5) * 1.15
+    /// The grid. A 20 m/s rally ball is a comfortable 0.6 s beat; a 32 m/s
+    /// drive is 0.45.
+    public var beat: TimeInterval {
+        (13.0 / max(pace, 10)).clamped(to: 0.42...0.68)
     }
 
-    /// Fraction of the flight at which it bounces. A deep ball bounces late,
-    /// close to you.
-    var bounceFraction: Double { 0.55 + 0.25 * depth }
+    public var beats: Int { isServe ? 4 : 3 }
 
-    /// Faster ball, tighter window, within reason.
     public var tolerance: TimeInterval {
-        (flightTime * 0.14).clamped(to: 0.08...0.16)
+        HapticVocabulary.tolerance(forBeat: beat)
     }
 
-    /// Time between the side cue and the opponent striking the ball. Long
-    /// enough to move the hand to the other side.
+    /// Time between the side cue and the first beat. Long enough to move the
+    /// hand to the other side.
     static let sideLead: TimeInterval = 0.7
 
     public func script() -> HapticScript {
-        var entries: [HapticScript.Entry] = []
-        var t: TimeInterval = 0
-        if !isServe {
-            entries.append(.init(at: 0, event: HapticVocabulary.tick))
-            if side == .backhand {
-                entries.append(.init(at: 0.16, event: HapticVocabulary.tick))
-            }
-            t = IncomingBall.sideLead
-        } else {
-            // The opponent's toss: a short rising rumble, then the hit.
-            entries.append(.init(at: 0, event: .rumble(duration: 0.6, from: 0.2, to: 0.7)))
-            t = 0.85
+        if isServe {
+            return HapticScript.countIn(beats: beats, interval: beat)
         }
-        entries.append(.init(at: t, event: HapticVocabulary.released))
-        entries.append(.init(at: t + flightTime * bounceFraction, event: HapticVocabulary.bounce))
-        return HapticScript(entries: entries, contactAt: t + flightTime)
+        var lead: [HapticScript.Entry] = [.init(at: 0, event: HapticVocabulary.tick)]
+        if side == .backhand {
+            lead.append(.init(at: 0.16, event: HapticVocabulary.tick))
+        }
+        return HapticScript.countIn(beats: beats, interval: beat, startingAt: IncomingBall.sideLead, leadIn: lead)
     }
 
     /// Spoken with the side cue, because a word is faster to learn than a
@@ -80,19 +71,13 @@ public struct IncomingBall: Hashable, Sendable {
     }
 }
 
-/// Your own serve. Nothing is coming; the cue is your toss.
+/// Your own serve. Nothing is coming; the count is your toss.
 public enum Serve {
-    /// Two ready ticks, a rising toss, and the hit at the top of it.
-    public static let script = HapticScript(
-        entries: [
-            .init(at: 0.0, event: HapticVocabulary.tick),
-            .init(at: 0.3, event: HapticVocabulary.tick),
-            .init(at: 0.7, event: .rumble(duration: 0.7, from: 0.15, to: 0.8)),
-        ],
-        contactAt: 1.55
-    )
+    public static let beat: TimeInterval = 0.6
+    /// Three beats and hit on the fourth: "and, two, three, serve".
+    public static let script = HapticScript.countIn(beats: 3, interval: beat)
     /// Self-paced, so generous.
-    public static let tolerance: TimeInterval = 0.16
+    public static let tolerance: TimeInterval = HapticVocabulary.tolerance(forBeat: beat) + 0.04
     /// Racket height at contact on a serve, metres.
     static let contactHeight = 2.5
 }

@@ -31,28 +31,67 @@ would be meaningless for golf, bowling and darts.
 Would change our mind: a sport where *which* motion to detect depends on game
 state mid-swing. Still none.
 
-## 2026-09-25 — With no screen, the game speaks and the ball is a rhythm in the hand
+## 2026-09-25 — An incoming ball is a count-in on an even grid, heard as well as felt
 
-Two consequences of phone-only that the scaffold did not spell out and that
-tennis and cricket forced:
+**Revises the entry below it, written the same morning.** The first phone test
+did exactly what that entry's "would change our mind" clause said would change
+it: the bounce-to-contact gap was not learnable at pace. Stephen's words after
+one over: "not playable." Kept struck through below.
+
+What replaces it: every ball is a **count-in** — evenly spaced beats, the last
+one accented, and contact exactly one beat after the last. Cricket counts four
+(three for a spinner); tennis calls the side, then counts three. The hand
+extrapolates a rhythm it has already felt three times, the way anyone claps on
+a downbeat. Pace is the interval and *nothing else moves the grid*: a quick
+bowler at 0.46 s, a spinner at 0.70 s. Length and depth change only what the
+ball does once struck.
+
+The beats are **clicks through the speaker as well as haptic taps**. The ear
+resolves rhythm far better than the hand, and a phone in a fist is loud enough
+for a garden. The haptic taps were also at a third of full intensity; a
+gripping hand does not feel that.
+
+After every ball the phone **says how the timing was** — "A touch late", "Too
+early, by 180 milliseconds" — because without it there is no way to learn the
+grid. The window is a third of a beat either side, clamped to 140–240 ms.
+
+Considered: keeping the bounce-gap for length but adding a count-in before it.
+Rejected — two rhythms is worse than one. The grid has to be the whole story.
+
+Would change our mind: a player who has learned the grid finding it too easy.
+Then the count gets shorter, or the accent goes, or length comes back as a
+grid-quantised bounce (two beats before contact for a short ball, one for
+everything else). Not before.
+
+## ~~2026-09-25 — With no screen, the game speaks and the ball is a rhythm in the hand~~
+
+**Half superseded** by the entry above, within hours and by the first phone
+test. The speaking half stands. The rhythm half is struck through.
 
 **The phone talks.** Side calls, results, the score. Voice is not a nice-to-have
 when the screen is behind your ear; it is the scoreboard. Speech synthesis, no
 recorded audio, so every string in `game/` is a line the phone can say.
 
-**An incoming ball is a `HapticScript`.** A list of `(time, event)` ending in
-silence at the contact moment. One shared vocabulary across sports: quickening
-ticks are a run-up, one or two ticks are a side call, a soft tap is release, a
-*hard sharp tap is the bounce*, and the swing goes into the silence after it —
-timed off the bounce, as the real sport is. Length, depth and pace are all
-expressed as the shape of that rhythm. `game/README.md` has the table.
+> ~~**An incoming ball is a `HapticScript`.** A list of `(time, event)` ending in
+> silence at the contact moment. One shared vocabulary across sports: quickening
+> ticks are a run-up, one or two ticks are a side call, a soft tap is release, a
+> *hard sharp tap is the bounce*, and the swing goes into the silence after it —
+> timed off the bounce, as the real sport is. Length, depth and pace are all
+> expressed as the shape of that rhythm.~~
+>
+> ~~Considered: a haptic *at* the contact moment. Rejected — you cannot swing at a
+> tap you have not felt yet. The last cue has to come before the swing starts,
+> which is what the bounce is for.~~
+>
+> ~~Would change our mind: garden testing showing the bounce-to-contact gap is not
+> learnable by feel at cricket pace. Then the script gets a count-in.~~
 
-Considered: a haptic *at* the contact moment. Rejected — you cannot swing at a
-tap you have not felt yet. The last cue has to come before the swing starts,
-which is what the bounce is for.
-
-Would change our mind: garden testing showing the bounce-to-contact gap is not
-learnable by feel at cricket pace. Then the script gets a count-in.
+The "would change our mind" clause was right and was triggered on the first
+try. What it missed was *why*: a fast ball's bounce is 200 ms before contact
+and a swing takes longer than that to arrive, so the last cue has to be far
+enough back that the player is extrapolating, not reacting. A real batter does
+this from the bowler's action, which the hand cannot see. The count-in is the
+substitute for watching the bowler.
 
 ## 2026-09-25 — A stand-in detector lives in `game/`, and dies when `motion/` lands
 

@@ -74,4 +74,17 @@ public struct Timing: Hashable, Sendable {
     /// ball. Callers decide what a miss means: bowled, a let-through, an air
     /// shot.
     public var missed: Bool { abs(error) > tolerance }
+
+    /// A few words the phone says after the result, so the player can learn
+    /// the grid. `nil` when there is nothing to correct.
+    public var feedback: String? {
+        let ms = Int((abs(error) * 1000).rounded())
+        switch grade {
+        case .perfect: return nil
+        case .early: return "A touch early."
+        case .late: return "A touch late."
+        case .tooEarly: return ms > 400 ? "Way too early." : "Too early, by \(ms) milliseconds."
+        case .tooLate: return ms > 400 ? "Way too late." : "Too late, by \(ms) milliseconds."
+        }
+    }
 }

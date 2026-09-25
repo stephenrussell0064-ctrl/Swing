@@ -1,23 +1,24 @@
 import Foundation
 
 /// One thing the hand feels. Data, not a call into Core Haptics — the app
-/// target turns these into `CHHapticEvent`s. Keeping the vocabulary here means
-/// a whole delivery or rally can be tested as a list of numbers.
+/// target turns these into `CHHapticEvent`s (and into clicks through the
+/// speaker). Keeping the vocabulary here means a whole delivery or rally can
+/// be tested as a list of numbers.
 public enum HapticEvent: Hashable, Sendable {
     /// A single transient click. `intensity` and `sharpness` are 0...1, as
-    /// Core Haptics defines them: a sharp, strong tap is the ball hitting the
-    /// ground; a soft dull one is a footstep.
+    /// Core Haptics defines them.
     case tap(intensity: Double, sharpness: Double)
     /// A continuous buzz for `duration` seconds, ramping from `from` to `to`
-    /// intensity. A rising rumble is the one shape a hand reads as "coming".
+    /// intensity. Used for outcomes, never for timing — a rumble has no edge
+    /// to time against.
     case rumble(duration: TimeInterval, from: Double, to: Double)
 }
 
 /// A timed sequence of haptic events, relative to the script's own start.
 ///
 /// The player cannot look at the phone while holding it, so this is the game's
-/// entire way of saying *when*. Every incoming ball is a script that ends at
-/// the moment the player is meant to make contact.
+/// entire way of saying *when*. Every incoming ball is a script that ends one
+/// beat before the moment the player is meant to make contact.
 public struct HapticScript: Hashable, Sendable {
     public struct Entry: Hashable, Sendable {
         public var at: TimeInterval
@@ -30,10 +31,13 @@ public struct HapticScript: Hashable, Sendable {
     }
 
     public var entries: [Entry]
-    /// When, relative to the script's start, contact is meant to happen. Not
-    /// itself a haptic — the whole design is that the hand feels the rhythm
-    /// *leading up* to this moment and swings into silence, the way you hit a
-    /// real ball: the last cue you get is the bounce, not the contact.
+    /// When, relative to the script's start, contact is meant to happen.
+    ///
+    /// Not itself a cue. A swing takes a quarter of a second to arrive, so a
+    /// cue *at* contact is a cue the player is already too late for. Instead
+    /// the script is a count-in on an even grid — beat, beat, beat, BEAT — and
+    /// contact is exactly one more beat later. The hand extrapolates the
+    /// rhythm the way it claps on a downbeat nobody has played yet.
     public var contactAt: TimeInterval
 
     public init(entries: [Entry], contactAt: TimeInterval) {
@@ -49,21 +53,39 @@ public struct HapticScript: Hashable, Sendable {
             }
         }.max() ?? 0
     }
+
+    /// A count-in: `beats` evenly spaced clicks starting at `start`, the last
+    /// one accented, with contact one more `interval` after the last.
+    public static func countIn(
+        beats: Int,
+        interval: TimeInterval,
+        startingAt start: TimeInterval = 0,
+        leadIn: [Entry] = []
+    ) -> HapticScript {
+        precondition(beats >= 1)
+        var entries = leadIn
+        for i in 0..<beats {
+            let last = i == beats - 1
+            entries.append(.init(at: start + Double(i) * interval, event: last ? HapticVocabulary.accent : HapticVocabulary.beat))
+        }
+        return HapticScript(entries: entries, contactAt: start + Double(beats) * interval)
+    }
 }
 
 // MARK: - The shared vocabulary
 
-/// Cues every sport reuses. A player who has learned that a sharp tap is the
-/// ball hitting the ground in cricket should find it means the same in tennis.
+/// Cues every sport reuses. A player who has learned the count-in in cricket
+/// should find it means the same in tennis.
 public enum HapticVocabulary {
-    /// The ball meeting the ground. The most important single cue: in every
-    /// bat-and-ball sport the swing is timed off the bounce.
-    public static let bounce = HapticEvent.tap(intensity: 1.0, sharpness: 1.0)
-    /// The ball leaving the opponent — bowler's hand, racket. Softer than the
-    /// bounce so the two are not confused.
-    public static let released = HapticEvent.tap(intensity: 0.6, sharpness: 0.4)
-    /// A count-in tap: one per side cue, one per step of a run-up.
-    public static let tick = HapticEvent.tap(intensity: 0.35, sharpness: 0.3)
+    /// One beat of the count-in. Strong: the hand is gripping and about to
+    /// move, and a faint tick is a tick it does not feel.
+    public static let beat = HapticEvent.tap(intensity: 0.9, sharpness: 0.6)
+    /// The last beat before contact. In every bat-and-ball sport this is the
+    /// bounce, and the swing is timed off it — one beat later.
+    public static let accent = HapticEvent.tap(intensity: 1.0, sharpness: 1.0)
+    /// A quiet tick outside the grid: a side call, a ready signal. Softer so
+    /// it is never mistaken for a beat.
+    public static let tick = HapticEvent.tap(intensity: 0.5, sharpness: 0.3)
 
     /// Outcome: you hit it cleanly. Crisp and short.
     public static let cleanStrike = HapticScript(
@@ -93,4 +115,11 @@ public enum HapticVocabulary {
         ],
         contactAt: 0
     )
+
+    /// The timing window for a grid of `interval`. A third of a beat either
+    /// side, clamped so a spinner's slow count is not a free hit and a quick's
+    /// is still humanly possible.
+    public static func tolerance(forBeat interval: TimeInterval) -> TimeInterval {
+        (interval * 0.33).clamped(to: 0.14...0.24)
+    }
 }

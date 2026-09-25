@@ -23,27 +23,30 @@ The phone is in your hand and you are swinging it. For the whole of a shot the
 screen is somewhere behind your ear. So the game talks to the hand and the ear,
 and the screen is for the glance afterwards.
 
-**The hand: haptic scripts.** Every ball the game sends at you is a
-`HapticScript` — a list of `(time, event)` that ends in silence at the moment
-you are meant to hit. The vocabulary is shared across sports so it only has to
-be learned once:
+**The hand and the ear: a count-in.** Every ball the game sends at you is a
+`HapticScript` — evenly spaced beats, felt as haptic taps *and* heard as clicks
+through the speaker, with the last beat accented and contact exactly one beat
+later. You swing on a beat nobody plays, the way you clap on a downbeat you
+can already hear coming. The vocabulary is shared across sports so it only has
+to be learned once:
 
-| Feel | Means |
+| Feel / hear | Means |
 | --- | --- |
-| soft ticks, speeding up | the bowler running in |
-| one tick / two ticks | tennis: forehand / backhand |
-| soft dull tap | the ball has left them (bowler's hand, racket) |
-| **hard sharp tap** | **the bounce.** The swing is timed off this, as it is in the real sport |
-| silence | swing now |
+| quiet tick, or two | tennis: forehand / backhand |
+| **beat, beat, beat** | the count-in. Lock on to the interval |
+| **BEAT** (high, hard) | the last one — the bounce. Swing so you meet the *next* beat |
+| silence | contact. Your swing is already moving |
 | crisp click | you middled it |
 | dull click and a fizz | you got an edge, or a frame |
 | long low buzz | you missed |
 | three rising clicks | boundary, winner, wicket |
 
-The gap between the bounce and the contact moment is the ball's length (cricket)
-or depth (tennis), and the whole script's tempo is its pace. A yorker bounces a
-hair before contact; a short ball bounces early and there is a long silence to
-wait through. That is learnable, and it is the game.
+Pace is the interval: a quick bowler counts at 0.46 s, a spinner at 0.70 s, a
+hard tennis drive at 0.42 s. Nothing else moves the grid. The first version
+tried to encode length as the gap between bounce and contact and it was not
+playable — see `docs/DECISIONS.md` for why. After every ball the phone says how
+your timing was ("A touch late." "Too early, by 180 milliseconds.") so the grid
+can be learned in a few balls.
 
 **The ear: the phone speaks.** Side calls ("Forehand."), results ("Four!",
 "Edged, caught behind!"), and the score between balls. The voice is the
@@ -59,7 +62,8 @@ without touching `core/` or `motion/` — see `docs/DECISIONS.md`.
 
 Bat an over, then bowl one, higher total wins. Three wickets each.
 
-**Batting.** The run-up ticks, release tap, bounce, silence. Swing. Then:
+**Batting.** Four beats (three for a spinner), the last one high. Swing to meet
+the next. Then:
 
 - Timing (`Shot.timestamp` against the `Cue`) is contact quality. Miss the
   window and a straight ball bowls you; a ball outside off is a dot.
@@ -88,15 +92,16 @@ another side call, another script, the rally goes on — or does not, and you
 hear the score.
 
 - **Side.** "Forehand." with one tick, or "Backhand." with two, 0.7 s before
-  the opponent strikes, which is long enough to move the hand across.
+  the count starts, which is long enough to move the hand across. Then three
+  beats, the last one high, and you swing to meet the fourth.
 - **Placement.** Early on a forehand goes cross-court, late goes down the line
   (mirrored for the backhand). Yaw adds to that. Past 4.1 m from centre is wide.
 - **Depth.** Speed and the racket-face launch angle. The hand's elevation is
   compressed by half — a groundstroke path is much steeper than the ball's
   flight — and topspin (rotation about a horizontal axis with `ω × v` pointing
   down) pulls a hard ball back inside the baseline. Slice floats it.
-- **Your serve.** Two ready ticks, a rising toss, hit at the top. Must land in
-  the service box; two faults is the point.
+- **Your serve.** Three beats, hit on the fourth. Must land in the service
+  box; two faults is the point.
 - **Scoring.** Standard, spoken with your score first because you are the one
   who cannot see it. No tiebreak yet: 7–6 ends a set.
 

@@ -19,14 +19,16 @@ final class CricketSession {
     private let source: any ShotSource
     private let inbox = ShotInbox()
     private let haptics: HapticPlayer
+    private let clicks: ClickPlayer
     private let announcer: Announcer
     private let fixtures = FixtureStore.shared
     private var loop: Task<Void, Never>?
 
-    init(source: any ShotSource, haptics: HapticPlayer, announcer: Announcer, handedness: Handedness) {
+    init(source: any ShotSource, haptics: HapticPlayer, clicks: ClickPlayer, announcer: Announcer, handedness: Handedness) {
         self.match = CricketMatch(oversPerSide: 1, wicketsPerSide: 3, seed: UInt64(Date().timeIntervalSince1970))
         self.source = source
         self.haptics = haptics
+        self.clicks = clicks
         self.announcer = announcer
         self.handedness = handedness
     }
@@ -59,8 +61,8 @@ final class CricketSession {
     private func run() async {
         announcer.say(match.phaseAnnouncement)
         headline = "You're batting"
-        detail = "Wait for the run-up. Swing after the bounce."
-        try? await Task.sleep(for: .seconds(3.5))
+        detail = "Count the beats. Swing on the one after the high one."
+        try? await Task.sleep(for: .seconds(4.5))
 
         while !Task.isCancelled {
             switch match.phase {
@@ -86,14 +88,15 @@ final class CricketSession {
         let cue = Cue(script: script, startingAt: start, tolerance: delivery.tolerance)
         inbox.clear()
         headline = "Here it comes"
-        detail = "\(delivery.bowler.rawValue.capitalized), \(Int(delivery.pace * 2.237)) mph"
+        detail = "\(delivery.bowler.rawValue.capitalized), \(Int(delivery.pace * 2.237)) mph · \(delivery.bowler.beats) beats"
         haptics.play(script, at: start)
+        clicks.schedule(script, at: start)
 
         let answer = await inbox.shot(for: cue, notBefore: start)
         if Task.isCancelled { return }
         let result = Batting.play(shot: answer?.shot, delivery: delivery, cue: cue, handedness: handedness)
         haptics.play(result.haptic)
-        announcer.sayNow(result.announcement)
+        announcer.sayNow([result.announcement, result.timing?.feedback].compactMap { $0 }.joined(separator: " "))
         match.record(result)
         headline = result.announcement
         detail = describe(result, delivery: delivery)

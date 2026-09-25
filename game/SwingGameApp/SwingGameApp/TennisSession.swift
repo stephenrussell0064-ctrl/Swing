@@ -16,14 +16,16 @@ final class TennisSession {
     private let source: any ShotSource
     private let inbox = ShotInbox()
     private let haptics: HapticPlayer
+    private let clicks: ClickPlayer
     private let announcer: Announcer
     private let fixtures = FixtureStore.shared
     private var loop: Task<Void, Never>?
 
-    init(source: any ShotSource, haptics: HapticPlayer, announcer: Announcer, handedness: Handedness) {
+    init(source: any ShotSource, haptics: HapticPlayer, clicks: ClickPlayer, announcer: Announcer, handedness: Handedness) {
         self.match = TennisMatch(opponent: .clubPlayer, handedness: handedness, server: .you, gamesToWin: 4, seed: UInt64(Date().timeIntervalSince1970))
         self.source = source
         self.haptics = haptics
+        self.clicks = clicks
         self.announcer = announcer
         self.handedness = handedness
     }
@@ -54,10 +56,10 @@ final class TennisSession {
     }
 
     private func run() async {
-        announcer.say("First to four games. One tap is forehand, two is backhand. Swing after the bounce.")
+        announcer.say("First to four games. One tick is forehand, two is backhand. Then count the beats and swing on the one after the high one.")
         headline = "First to four games"
-        detail = "One tap forehand, two taps backhand."
-        try? await Task.sleep(for: .seconds(4.5))
+        detail = "One tick forehand, two backhand. Swing on the beat after the high one."
+        try? await Task.sleep(for: .seconds(6))
 
         var nextStartDelay: TimeInterval = 0.6
         while !Task.isCancelled {
@@ -77,10 +79,11 @@ final class TennisSession {
             let cue = Cue(script: script, startingAt: start, tolerance: tolerance)
             inbox.clear()
             haptics.play(script, at: start)
+            clicks.schedule(script, at: start)
             if case .incoming(let ball, _) = match.state {
                 detail = String(format: "%@ · %.0f mph", ball.side.rawValue.capitalized, ball.pace * 2.237)
             } else {
-                detail = "Swing at the top of the toss."
+                detail = "Three beats, then serve."
             }
 
             let answer = await inbox.shot(for: cue, notBefore: start)
@@ -88,7 +91,7 @@ final class TennisSession {
             let stateBefore = match.state
             let step = match.play(answer?.shot, cue: cue)
             haptics.play(step.stroke.haptic)
-            announcer.sayNow(step.stroke.announcement)
+            announcer.sayNow([step.stroke.announcement, step.stroke.timing?.feedback].compactMap { $0 }.joined(separator: " "))
             headline = step.stroke.announcement
             detail = describe(step)
 

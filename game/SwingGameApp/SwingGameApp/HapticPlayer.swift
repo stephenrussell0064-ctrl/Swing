@@ -23,10 +23,13 @@ final class HapticPlayer {
         do {
             let engine = try CHHapticEngine()
             engine.playsHapticsOnly = true
-            engine.resetHandler = { [weak self] in
+            // Both handlers are called on the engine's own queue; `@Sendable`
+            // keeps them from inheriting main-actor isolation (see the same
+            // note in StandInDetector).
+            engine.resetHandler = { @Sendable [weak self] in
                 Task { @MainActor in self?.startEngine() }
             }
-            engine.stoppedHandler = { [weak self] _ in
+            engine.stoppedHandler = { @Sendable [weak self] _ in
                 Task { @MainActor in self?.engine = nil }
             }
             try engine.start()

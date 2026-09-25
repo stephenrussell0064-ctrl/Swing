@@ -39,6 +39,7 @@ final class PlayModel {
     let handedness: Handedness
     let haptics = HapticPlayer()
     let announcer = Announcer()
+    let clicks = ClickPlayer()
     let detector: StandInDetector
     let tap = TapShotSource()
     /// Simulator has no motion sensors; a button stands in for the hand.
@@ -85,12 +86,12 @@ final class PlayModel {
         switch sport {
         case .cricket:
             if cricket == nil {
-                cricket = CricketSession(source: source, haptics: haptics, announcer: announcer, handedness: handedness)
+                cricket = CricketSession(source: source, haptics: haptics, clicks: clicks, announcer: announcer, handedness: handedness)
             }
             cricket?.start()
         case .tennis:
             if tennis == nil {
-                tennis = TennisSession(source: source, haptics: haptics, announcer: announcer, handedness: handedness)
+                tennis = TennisSession(source: source, haptics: haptics, clicks: clicks, announcer: announcer, handedness: handedness)
             }
             tennis?.start()
         default:
@@ -162,6 +163,10 @@ private struct PlayScreen: View {
                     Toggle("Mute voice", isOn: Binding(
                         get: { model.announcer.isMuted },
                         set: { model.announcer.isMuted = $0 }
+                    ))
+                    Toggle("Mute clicks", isOn: Binding(
+                        get: { model.clicks.isMuted },
+                        set: { model.clicks.isMuted = $0 }
                     ))
                 } label: {
                     Image(systemName: "ellipsis.circle")
