@@ -31,6 +31,41 @@ would be meaningless for golf, bowling and darts.
 Would change our mind: a sport where *which* motion to detect depends on game
 state mid-swing. Still none.
 
+## 2026-09-26 — Every ball starts from the stance, and the beat is the player's own swing
+
+Two changes from the second phone test, where the count was audible but still
+could not be swung to.
+
+**The stance is the calibration, borrowed from golf.** The player hangs the
+phone down like a bat, screen facing the bowler (or net), and holds still for
+half a second. The phone buzzes: set. Where the screen faces at that moment is
+the target line. Every ball begins this way, so the frame is refreshed every
+ball, the player can turn between balls, and — the part that matters for
+timing — the detector is armed by the stance rather than by a threshold that
+was either too twitchy or too deaf. There is no Aim button any more.
+
+**The beat is measured, not chosen.** After the first stance the player takes
+two practice swings with no ball. The time from leaving the stance to the
+peak of rotation is their swing duration, and that becomes the count-in's
+beat: "start your swing on the high beat" now means their own natural swing
+arrives exactly on the next one. A quick bowler is 0.85 of that, a spinner
+1.2. Detection thresholds sit at a third of the measured peak rotation, so a
+gentle swinger registers and a hard hitter's waggle does not. `SwingProfile`
+in `game/SwingGame` holds both numbers; nothing in `core/` changed.
+
+Also found: the stand-in was reporting a swing at the *end* of the
+follow-through, several hundred milliseconds after the game stopped waiting
+for it. That, not the haptics, was most of "the batting motion doesn't
+work". A stroke is now reported the moment rotation has fallen well off its
+peak, and a backswing is reported as a stroke too — `game/` already picks the
+one nearest the cue.
+
+Considered: one fixed beat for everyone, tuned in the garden. Rejected because
+the two of us swing differently and neither of us is the player.
+
+Would change our mind: the profile drifting mid-match as a player warms up.
+Then every scored swing feeds back into it, not only the practice ones.
+
 ## 2026-09-25 — An incoming ball is a count-in on an even grid, heard as well as felt
 
 **Revises the entry below it, written the same morning.** The first phone test

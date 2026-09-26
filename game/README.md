@@ -23,30 +23,47 @@ The phone is in your hand and you are swinging it. For the whole of a shot the
 screen is somewhere behind your ear. So the game talks to the hand and the ear,
 and the screen is for the glance afterwards.
 
-**The hand and the ear: a count-in.** Every ball the game sends at you is a
-`HapticScript` — evenly spaced beats, felt as haptic taps *and* heard as clicks
-through the speaker, with the last beat accented and contact exactly one beat
-later. You swing on a beat nobody plays, the way you clap on a downbeat you
-can already hear coming. The vocabulary is shared across sports so it only has
-to be learned once:
+**The stance.** Every ball starts the same way, borrowed from golf: hang the
+phone down like a bat, screen facing the bowler (or the net), and hold still.
+Half a second later it buzzes — a rumble, unlike any beat — and you are set.
+Where the screen faced is the target line, refreshed every ball. There is no
+aim button.
+
+**Your swing is the beat.** The first time you are set, the phone asks for two
+practice swings with no ball. It measures how long your swing takes from
+leaving the stance to the fastest point, and that becomes the beat of every
+count-in. So when it says "swing on the beat after the high one", your own
+swing, started on the high beat, arrives exactly on time.
+
+**The hand and the ear: a count-in.** Every ball is then a `HapticScript` —
+four evenly spaced beats at your interval, felt as haptic thumps *and* heard as
+clicks through the speaker, with the last beat accented and contact exactly one
+beat later. You swing on a beat nobody plays, the way you clap on a downbeat you
+can already hear coming. The vocabulary is shared across sports:
 
 | Feel / hear | Means |
 | --- | --- |
+| long rumble | set. You are in the stance and the ball is about to come |
 | quiet tick, or two | tennis: forehand / backhand |
-| **beat, beat, beat** | the count-in. Lock on to the interval |
-| **BEAT** (high, hard) | the last one — the bounce. Swing so you meet the *next* beat |
-| silence | contact. Your swing is already moving |
+| **beat, beat, beat** | the count-in, at your own swing's interval |
+| **BEAT** (high, double thump) | the last one. Start your swing now |
+| silence | contact, one beat later |
 | crisp click | you middled it |
 | dull click and a fizz | you got an edge, or a frame |
 | long low buzz | you missed |
 | three rising clicks | boundary, winner, wicket |
 
-Pace is the interval: a quick bowler counts at 0.46 s, a spinner at 0.70 s, a
-hard tennis drive at 0.42 s. Nothing else moves the grid. The first version
-tried to encode length as the gap between bounce and contact and it was not
-playable — see `docs/DECISIONS.md` for why. After every ball the phone says how
-your timing was ("A touch late." "Too early, by 180 milliseconds.") so the grid
-can be learned in a few balls.
+Pace scales your beat: a quick bowler is 0.85 of it, a spinner 1.2, a hard
+tennis drive 0.75. Nothing else moves the grid. The first version tried to
+encode length as the gap between bounce and contact and it was not playable —
+see `docs/DECISIONS.md`. After every ball the phone says how your timing was
+("A touch late." "Too early, by 180 milliseconds.").
+
+**The screen.** A top-down ground or court. Fielders, the pitch, the rope; the
+ball runs out along its line after a shot. In tennis the incoming ball crosses
+toward the side it is coming to as the count plays, and yours lands where the
+game says it did. The beats pulse along the bottom. All for the glance after,
+and for whoever is watching.
 
 **The ear: the phone speaks.** Side calls ("Forehand."), results ("Four!",
 "Edged, caught behind!"), and the score between balls. The voice is the
@@ -62,8 +79,8 @@ without touching `core/` or `motion/` — see `docs/DECISIONS.md`.
 
 Bat an over, then bowl one, higher total wins. Three wickets each.
 
-**Batting.** Four beats (three for a spinner), the last one high. Swing to meet
-the next. Then:
+**Batting.** Stance, buzz, four beats, the last one high. Start your swing on
+it. Then:
 
 - Timing (`Shot.timestamp` against the `Cue`) is contact quality. Miss the
   window and a straight ball bowls you; a ball outside off is a dot.
@@ -74,7 +91,7 @@ the next. Then:
 - Poor contact quality is an edge: behind square on the off side, or into the
   keeper's gloves if it was thin.
 
-**Bowling.** No cue: bowl when ready. Hand speed becomes ball speed; the release
+**Bowling.** Stance, buzz, then no count: bowl when ready. Hand speed becomes ball speed; the release
 angle sets the length (flatter is fuller); yaw off the calibrated line sets the
 line; fast rotation about a vertical axis is spin and turns it. The phone's
 batter (`Batter`) replies deterministically from a seeded luck stream, so the
@@ -91,16 +108,17 @@ direction, speed and spin. If it lands in, the opponent either gets it back —
 another side call, another script, the rally goes on — or does not, and you
 hear the score.
 
-- **Side.** "Forehand." with one tick, or "Backhand." with two, 0.7 s before
-  the count starts, which is long enough to move the hand across. Then three
-  beats, the last one high, and you swing to meet the fourth.
+- **Side.** From the ready position: buzz, then "Forehand." with one tick, or
+  "Backhand." with two, 0.7 s before the count starts, which is long enough to
+  move the hand across. Then four beats, the last one high, and you swing to
+  meet the fifth.
 - **Placement.** Early on a forehand goes cross-court, late goes down the line
   (mirrored for the backhand). Yaw adds to that. Past 4.1 m from centre is wide.
 - **Depth.** Speed and the racket-face launch angle. The hand's elevation is
   compressed by half — a groundstroke path is much steeper than the ball's
   flight — and topspin (rotation about a horizontal axis with `ω × v` pointing
   down) pulls a hard ball back inside the baseline. Slice floats it.
-- **Your serve.** Three beats, hit on the fourth. Must land in the service
+- **Your serve.** Four beats, hit on the fifth. Must land in the service
   box; two faults is the point.
 - **Scoring.** Standard, spoken with your score first because you are the one
   who cannot see it. No tiebreak yet: 7–6 ends a set.
@@ -114,8 +132,10 @@ from a garden should settle.
 ## The stand-in detector
 
 `SwingGameApp/StandIn/StandInDetector.swift` reads Core Motion and produces a
-`Shot`, crudely: rotation-rate thresholds for the window, integrated
-acceleration for speed and direction, the sample of peak hand speed as release.
+`Shot`, crudely: the stance (hanging, top edge down, still) fixes the frame
+from where the screen faces; a stroke is a rise and fall in rotation rate,
+reported at its peak as soon as the rate has fallen well off it; direction is
+where the screen faces at that peak; speed is peak rotation times an arm.
 It is scaffolding. It exists because `motion/` has not landed and the two of us
 are not in the same room this week, and **it is deleted the day `motion/`
 arrives.** It knows nothing about sport; if a sport word appears in it, take it

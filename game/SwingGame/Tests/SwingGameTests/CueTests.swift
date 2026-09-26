@@ -43,85 +43,127 @@ struct CueTests {
     @Test("a cue built from a script lands on the script's contact moment")
     func fromScript() {
         let d = Delivery(bowler: .fast, line: 0, length: .good, pace: 36)
-        let script = d.script()
-        let cue = Cue(script: script, startingAt: 500, tolerance: d.tolerance)
+        let script = d.script(for: .default)
+        let cue = Cue(script: script, startingAt: 500, tolerance: d.tolerance(for: .default))
         #expect(cue.contactTime == 500 + script.contactAt)
         #expect(cue.deadline > cue.contactTime)
+    }
+}
+
+@Suite("Swing profile")
+struct SwingProfileTests {
+
+    @Test("the beat is the player's own swing, within what a hand can count")
+    func beatIsTheSwing() {
+        #expect(SwingProfile(swingDuration: 0.65, peakRotation: 9).beat == 0.65)
+        #expect(SwingProfile(swingDuration: 0.2, peakRotation: 9).beat == 0.45)
+        #expect(SwingProfile(swingDuration: 2.0, peakRotation: 9).beat == 1.0)
+    }
+
+    @Test("a quick bowler shortens a player's beat and a spinner lengthens it")
+    func scaled() {
+        let p = SwingProfile(swingDuration: 0.7, peakRotation: 9)
+        let fast = Delivery(bowler: .fast, line: 0, length: .good, pace: 37).beat(for: p)
+        let med = Delivery(bowler: .medium, line: 0, length: .good, pace: 30).beat(for: p)
+        let spin = Delivery(bowler: .spin, line: 0, length: .good, pace: 20).beat(for: p)
+        #expect(fast < med && med < spin)
+        #expect(abs(med - 0.7) < 1e-9)
+    }
+
+    @Test("a practice swing that was too short or too still is not a profile")
+    func measured() {
+        let good = TestShots.straightSwing(spinRate: 11)
+        #expect(SwingProfile.measured(from: good)?.swingDuration == 0.6)
+        var still = good
+        still.spinRate = 0.5
+        #expect(SwingProfile.measured(from: still) == nil)
+        var twitch = good
+        twitch.tempo.back = 0.1
+        #expect(SwingProfile.measured(from: twitch) == nil)
+    }
+
+    @Test("merging follows the newer swing")
+    func merging() {
+        let p = SwingProfile(swingDuration: 0.8, peakRotation: 8).merging(swingDuration: 0.6, peakRotation: 12)
+        #expect(abs(p.swingDuration - 0.68) < 1e-9)
+        #expect(abs(p.peakRotation - 10.4) < 1e-9)
     }
 }
 
 @Suite("Count-in scripts")
 struct HapticScriptTests {
 
+    let profile = SwingProfile.default
+
     @Test("beats are evenly spaced, the last is accented, and contact is one beat after it")
     func grid() {
         for bowler in Delivery.Bowler.allCases {
             let d = Delivery(bowler: bowler, line: 0, length: .good, pace: 30)
-            let s = d.script()
+            let s = d.script(for: profile)
+            let interval = d.beat(for: profile)
             let times = s.entries.map(\.at)
-            #expect(times.count == bowler.beats)
+            #expect(times.count == Delivery.beats)
             let gaps = zip(times.dropFirst(), times).map { $0 - $1 }
-            for g in gaps { #expect(abs(g - bowler.beat) < 1e-9) }
+            for g in gaps { #expect(abs(g - interval) < 1e-9) }
             #expect(s.entries.last!.event == HapticVocabulary.accent)
             #expect(s.entries.dropLast().allSatisfy { $0.event == HapticVocabulary.beat })
-            #expect(abs(s.contactAt - (times.last! + bowler.beat)) < 1e-9)
+            #expect(abs(s.contactAt - (times.last! + interval)) < 1e-9)
         }
     }
 
     @Test("the last cue comes before contact: nothing is played at the moment to swing")
     func silenceAtContact() {
-        let s = Delivery(bowler: .fast, line: 0, length: .yorker, pace: 38).script()
+        let s = Delivery(bowler: .fast, line: 0, length: .yorker, pace: 38).script(for: profile)
         #expect(s.duration < s.contactAt)
         #expect(!s.entries.contains { abs($0.at - s.contactAt) < 1e-9 })
     }
 
     @Test("length does not move the grid — it is unlearnable at pace, so it only changes the outcome")
     func lengthDoesNotMoveGrid() {
-        let scripts = Delivery.Length.allCases.map { Delivery(bowler: .fast, line: 0, length: $0, pace: 36).script() }
+        let scripts = Delivery.Length.allCases.map { Delivery(bowler: .fast, line: 0, length: $0, pace: 36).script(for: profile) }
         #expect(Set(scripts).count == 1)
     }
 
-    @Test("a quick bowler's beat is shorter than a spinner's, and the window with it")
-    func paceSetsTheBeat() {
+    @Test("the window is a third of a beat, within human limits")
+    func tolerance() {
         let quick = Delivery(bowler: .fast, line: 0, length: .good, pace: 37)
         let spin = Delivery(bowler: .spin, line: 0, length: .good, pace: 20)
-        #expect(quick.bowler.beat < spin.bowler.beat)
-        #expect(quick.tolerance < spin.tolerance)
-        #expect(quick.tolerance >= 0.14)
-        #expect(spin.tolerance <= 0.24)
+        #expect(quick.tolerance(for: profile) < spin.tolerance(for: profile))
+        #expect(quick.tolerance(for: profile) >= 0.14)
+        #expect(spin.tolerance(for: profile) <= 0.24)
     }
 
     @Test("tennis: forehand is one tick, backhand is two, then the same count-in")
     func tennisSideCue() {
         let fh = IncomingBall(side: .forehand, pace: 25, depth: 0.7)
         let bh = IncomingBall(side: .backhand, pace: 25, depth: 0.7)
-        let fs = fh.script(), bs = bh.script()
+        let fs = fh.script(for: profile), bs = bh.script(for: profile)
         #expect(fs.entries.filter { $0.event == HapticVocabulary.tick }.count == 1)
         #expect(bs.entries.filter { $0.event == HapticVocabulary.tick }.count == 2)
-        #expect(fs.entries.filter { $0.event == HapticVocabulary.beat }.count == fh.beats - 1)
+        #expect(fs.entries.filter { $0.event == HapticVocabulary.beat }.count == IncomingBall.beats - 1)
         #expect(fs.entries.last!.event == HapticVocabulary.accent)
-        #expect(abs(fs.contactAt - (fs.entries.last!.at + fh.beat)) < 1e-9)
+        #expect(abs(fs.contactAt - (fs.entries.last!.at + fh.beat(for: profile))) < 1e-9)
         // The beats start after the side call, with time to move the hand.
         #expect(fs.entries.first { $0.event == HapticVocabulary.beat }!.at == IncomingBall.sideLead)
     }
 
-    @Test("a harder tennis ball is a shorter beat, within human limits")
+    @Test("a harder tennis ball is a shorter beat")
     func tennisBeat() {
         let soft = IncomingBall(side: .forehand, pace: 18, depth: 0.5)
         let hard = IncomingBall(side: .forehand, pace: 34, depth: 0.5)
-        #expect(soft.beat > hard.beat)
-        #expect(hard.beat >= 0.5)
-        #expect(soft.beat <= 0.75)
+        #expect(soft.beat(for: profile) > hard.beat(for: profile))
+        #expect(abs(IncomingBall(side: .forehand, pace: 22, depth: 0.5).beat(for: profile) - profile.beat) < 1e-9)
     }
 
     @Test("their serve has no side call; every count is four beats")
     func serveScript() {
-        let s = IncomingBall(side: .forehand, pace: 30, depth: 0.8, isServe: true).script()
+        let s = IncomingBall(side: .forehand, pace: 30, depth: 0.8, isServe: true).script(for: profile)
         #expect(!s.entries.contains { $0.event == HapticVocabulary.tick })
         #expect(s.entries.count == 4)
-        #expect(Serve.script.entries.count == 4)
-        #expect(Serve.script.entries.last!.event == HapticVocabulary.accent)
-        #expect(abs(Serve.script.contactAt - 4 * Serve.beat) < 1e-9)
+        let mine = Serve.script(for: profile)
+        #expect(mine.entries.count == 4)
+        #expect(mine.entries.last!.event == HapticVocabulary.accent)
+        #expect(abs(mine.contactAt - 4 * profile.beat) < 1e-9)
     }
 
     @Test("script entries are kept in time order however they were given")

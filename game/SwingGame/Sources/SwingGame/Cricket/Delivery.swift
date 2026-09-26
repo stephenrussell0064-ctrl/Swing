@@ -3,30 +3,31 @@ import SwingCore
 
 /// One ball, bowled at the player.
 ///
-/// The player cannot see it. What they get is a count-in: the bowler's
-/// footsteps as evenly spaced beats, the last one accented (the bounce), and
-/// contact exactly one beat later. A quick bowler's beat is short; a spinner's
-/// is long. Everything the hand needs is in the interval.
+/// The player cannot see it. What they get is a count-in: four evenly spaced
+/// beats, the last one accented, and contact exactly one beat later. The beat
+/// is the player's own swing duration (see ``SwingProfile``), scaled by the
+/// bowler: a quick bowler's beat is shorter, a spinner's longer.
 public struct Delivery: Hashable, Sendable {
 
     public enum Bowler: String, Hashable, Sendable, CaseIterable {
         case fast, medium, spin
 
-        /// The grid. Seconds between beats, and between the last beat and
-        /// contact. Slower than a real ball's flight, on purpose: the first
-        /// phone test at 0.46 s could not be locked on to cold. Speed is the
-        /// knob to turn once the grid is learned, not before.
-        public var beat: TimeInterval {
+        /// How the player's own beat is scaled for this bowler.
+        public var beatFactor: Double {
             switch self {
-            case .fast: 0.58
-            case .medium: 0.68
-            case .spin: 0.80
+            case .fast: 0.85
+            case .medium: 1.0
+            case .spin: 1.2
             }
         }
 
-        /// Beats in the count-in, including the accented last one. Four,
-        /// always: three to hear the interval, one to confirm it.
-        public var beats: Int { 4 }
+        public var spoken: String {
+            switch self {
+            case .fast: "fast bowler"
+            case .medium: "medium pacer"
+            case .spin: "spinner"
+            }
+        }
     }
 
     public enum Length: String, Hashable, Sendable, CaseIterable {
@@ -50,7 +51,7 @@ public struct Delivery: Hashable, Sendable {
     public var line: Double
     public var length: Length
     /// m/s at release. Fast 35–40, medium 28–33, spin 18–24. Affects how hard
-    /// the ball comes off the bat; the *timing* is the bowler's beat.
+    /// the ball comes off the bat; the *timing* is the beat.
     public var pace: Double
 
     public init(bowler: Bowler, line: Double, length: Length, pace: Double) {
@@ -64,8 +65,16 @@ public struct Delivery: Hashable, Sendable {
     /// less the bowler's stride and the batter's stance.
     static let flightDistance = 17.5
 
-    public var tolerance: TimeInterval {
-        HapticVocabulary.tolerance(forBeat: bowler.beat)
+    /// Beats in the count-in, including the accented last one. Four, always:
+    /// three to hear the interval, one to confirm it.
+    public static let beats = 4
+
+    public func beat(for profile: SwingProfile) -> TimeInterval {
+        profile.beat(scaledBy: bowler.beatFactor)
+    }
+
+    public func tolerance(for profile: SwingProfile) -> TimeInterval {
+        HapticVocabulary.tolerance(forBeat: beat(for: profile))
     }
 
     public var isStraight: Bool { abs(line) <= 0.15 }
@@ -74,8 +83,8 @@ public struct Delivery: Hashable, Sendable {
     public var isWide: Bool { abs(line) > 0.95 }
 
     /// What the hand feels between "here it comes" and the moment to swing.
-    public func script() -> HapticScript {
-        HapticScript.countIn(beats: bowler.beats, interval: bowler.beat)
+    public func script(for profile: SwingProfile) -> HapticScript {
+        HapticScript.countIn(beats: Delivery.beats, interval: beat(for: profile))
     }
 
     /// The ball to learn the grid on: medium pace, straight, good length.

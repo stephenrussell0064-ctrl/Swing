@@ -116,12 +116,12 @@ struct StrokeTests {
     @Test("a serve must land in the service box")
     func serve() {
         // Hit downward from 2.5 m, hard: the box is 6.4 m past the net.
-        let good = Stroke.serve(shot: swing(speed: 14, up: -0.08), cue: TestShots.cue(tolerance: Serve.tolerance))
+        let good = Stroke.serve(shot: swing(speed: 14, up: -0.08), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
         #expect(good.outcome.isIn, "\(good.outcome)")
-        let long = Stroke.serve(shot: swing(speed: 14, up: 0.25), cue: TestShots.cue(tolerance: Serve.tolerance))
+        let long = Stroke.serve(shot: swing(speed: 14, up: 0.25), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
         #expect(long.outcome == .outLong)
         #expect(long.announcement == "Long. Fault.")
-        let netted = Stroke.serve(shot: swing(speed: 14, up: -0.6), cue: TestShots.cue(tolerance: Serve.tolerance))
+        let netted = Stroke.serve(shot: swing(speed: 14, up: -0.6), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
         #expect(netted.outcome == .net)
     }
 }
@@ -203,7 +203,7 @@ struct TennisMatchTests {
     @Test("a fault gives a second serve; two faults lose the point")
     func doubleFault() {
         var m = TennisMatch(server: .you)
-        let cue = TestShots.cue(tolerance: Serve.tolerance)
+        let cue = TestShots.cue(tolerance: Serve.tolerance(for: .default))
         let first = m.play(nil, cue: cue)
         #expect(m.state == .yourServe(second: true))
         #expect(first.event == nil)
@@ -232,7 +232,7 @@ struct TennisMatchTests {
         var m = TennisMatch(server: .opponent)
         var strokes = 0
         while case .incoming(let ball, _) = m.state, strokes < 50 {
-            let cue = Cue(contactTime: TestShots.contactTime, tolerance: ball.tolerance)
+            let cue = Cue(contactTime: TestShots.contactTime, tolerance: ball.tolerance(for: .default))
             let step = m.play(swing(), cue: cue)
             strokes += 1
             if !step.rallyContinues {
@@ -250,7 +250,7 @@ struct TennisMatchTests {
             var m = TennisMatch(server: .opponent, seed: 5)
             for _ in 0..<10 {
                 if case .over = m.state { break }
-                let tol = m.nextScript?.tolerance ?? 0.1
+                let tol = m.nextScript(for: .default)?.tolerance ?? 0.1
                 m.play(swing(), cue: Cue(contactTime: TestShots.contactTime, tolerance: tol))
             }
             return m

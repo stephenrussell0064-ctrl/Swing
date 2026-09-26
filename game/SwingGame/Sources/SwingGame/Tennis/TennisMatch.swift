@@ -37,11 +37,12 @@ public struct TennisMatch: Hashable, Sendable {
             : .incoming(opponent.serve(pointIndex: 0, seed: seed), stroke: 0)
     }
 
-    /// What to feel next, and the tolerance to judge the swing by.
-    public var nextScript: (script: HapticScript, tolerance: TimeInterval)? {
+    /// What to feel next, and the tolerance to judge the swing by, for a
+    /// player with this swing.
+    public func nextScript(for profile: SwingProfile) -> (script: HapticScript, tolerance: TimeInterval)? {
         switch state {
-        case .yourServe: (Serve.script, Serve.tolerance)
-        case .incoming(let ball, _): (ball.script(), ball.tolerance)
+        case .yourServe: (Serve.script(for: profile), Serve.tolerance(for: profile))
+        case .incoming(let ball, _): (ball.script(for: profile), ball.tolerance(for: profile))
         case .over: nil
         }
     }

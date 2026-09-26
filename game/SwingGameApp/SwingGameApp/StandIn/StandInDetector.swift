@@ -2,6 +2,7 @@ import CoreMotion
 import Foundation
 import simd
 import SwingCore
+import SwingGame
 
 // SCAFFOLDING. Delete this file the day `motion/` lands.
 //
@@ -10,11 +11,31 @@ import SwingCore
 // *some* `Shot` arriving when the phone is swung, and the two of us are not
 // in the same room this week. It is the crudest thing that produces a `Shot`
 // with every field filled in from real motion, and — the part that is worth
-// keeping — it records the trace it cut the `Shot` from, so the tennis and
-// cricket swings recorded with it become fixtures the real detector is run
-// against later. That re-run will overwrite `expected`; that is the design.
+// keeping — it records the trace it cut the `Shot` from, so the swings
+// recorded with it become fixtures the real detector is run against later.
+// That re-run will overwrite `expected`; that is the design.
 //
 // It knows nothing about sport. If a sport word appears in here, take it out.
+//
+// How it works:
+//
+// - **Stance.** The player hangs the phone down, top edge to the floor, and
+//   holds still. That is the address position, borrowed from golf. Where the
+//   screen faces at that moment is the target line; that fixes the play frame.
+//   Every ball starts from the stance, so the frame is refreshed every ball
+//   and the player can turn between balls without anything going wrong.
+// - **Strokes.** A stroke is a rise and fall in rotation rate. Each one is
+//   reported as a `Shot` timestamped at its peak, as soon as the rate has
+//   fallen well off the peak — not at the end of the follow-through, which is
+//   hundreds of milliseconds later and was why the first version "did not
+//   work": the shot arrived after the game had stopped waiting. A backswing
+//   is a stroke too; `game/` picks the one nearest its cue.
+// - **Direction** is where the screen faces at the peak — the bat face — not
+//   the integrated velocity, which drifts. Speed is peak rotation times an
+//   arm's length.
+// - **Tempo.back** is the time from leaving rest (the hand last being still
+//   for 150 ms) to the peak, so a practice swing measures how long this
+//   player's swing takes.
 
 @MainActor
 @Observable
@@ -22,55 +43,49 @@ final class StandInDetector: ShotSource {
     var handler: ((Shot, [MotionSample]) -> Void)?
     private(set) var isCalibrated = false
     private(set) var status = "Not started"
+    private(set) var inStance = false
     /// For the screen: how fast the phone is turning right now, rad/s.
     private(set) var liveRotation: Double = 0
+    var profile: SwingProfile = .default
 
     private let manager = CMMotionManager()
     private let queue = OperationQueue()
 
-    /// One reading, already rotated into the world frame (Z up), with a wall
-    /// clock time so it can be compared to a cue.
     private struct Raw: Sendable {
         var wall: TimeInterval
+        /// Device → world (Z up).
         var attitude: simd_quatd
-        var rotationRate: SIMD3<Double>
-        var acceleration: SIMD3<Double>   // m/s², gravity removed
-        var gravity: SIMD3<Double>
+        var rotationRate: SIMD3<Double>     // world, rad/s
+        var acceleration: SIMD3<Double>     // world, m/s², gravity removed
+        var gravity: SIMD3<Double>          // world, g
+        var deviceGravity: SIMD3<Double>    // device frame, g
+        var omega: Double
     }
 
-    /// World → play rotation, fixed at calibration.
+    /// World → play rotation, fixed at the stance.
     private var frame: simd_quatd?
-
     private var buffer: [Raw] = []
-    private let bufferSeconds: TimeInterval = 4
+    private let bufferSeconds: TimeInterval = 5
 
-    private enum State {
+    // Rest: still for a moment. Leaving rest starts a motion.
+    private var restCandidateSince: TimeInterval?
+    private var atRest = true
+    private var motionStart: TimeInterval?
+    private let restOmega = 1.2
+    private let restHold: TimeInterval = 0.15
+
+    // Stance: hanging, top edge down, still.
+    private var stanceSince: TimeInterval?
+    private let stanceHold: TimeInterval = 0.6
+
+    // Strokes.
+    private enum Stroke {
         case idle
-        case moving(start: Int)
-        case swinging(start: Int, peakOmega: Double, peakOmegaAt: Int)
-        /// Rotation has dropped after a peak. A real swing passes through
-        /// near-zero rotation at the top of the backswing, so this is not yet
-        /// the end: if it picks up again within `settleTime` it is the same
-        /// motion and the bigger peak wins. Only after the quiet holds is the
-        /// motion over.
-        case settling(start: Int, peakOmega: Double, peakOmegaAt: Int, since: TimeInterval)
+        case rising(peak: Double, peakWall: TimeInterval, peakIndex: Int)
+        case cooldown
     }
-    private var state = State.idle
-    private var velocity = SIMD3<Double>.zero
-    private var speeds: [Double] = []       // |velocity| per sample since motion start
-    private var velocities: [SIMD3<Double>] = []
-
-    // Thresholds. Tuned by feel against one phone in one kitchen, which is
-    // exactly the kind of tuning `motion/` exists to do properly.
-    private let moveOmega = 2.0
-    private let moveAccel = 1.5
-    private let swingOmega = 5.0
-    private let releaseFraction = 0.35
-    private let velocityLeak = 0.998
-    /// How long rotation has to stay low before a motion counts as finished.
-    /// Longer than the pause at the top of a backswing, shorter than the gap
-    /// between two balls.
-    private let settleTime: TimeInterval = 0.22
+    private var stroke = Stroke.idle
+    private var strokeThreshold: Double { max(2.5, profile.peakRotation * 0.35) }
 
     func start() {
         guard manager.isDeviceMotionAvailable else {
@@ -83,21 +98,24 @@ final class StandInDetector: ShotSource {
         // `@Sendable` matters: without it, a closure formed inside this
         // main-actor method is main-actor-isolated, and Core Motion calling it
         // on its own queue trips the Swift 6 runtime isolation check (SIGTRAP).
-        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { @Sendable [weak self] motion, error in
-            if let error { NSLog("swing: device motion error \(error)") }
+        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { @Sendable [weak self] motion, _ in
             guard let motion else { return }
             let q = motion.attitude.quaternion
             let attitude = simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w)
+            let rot = SIMD3(motion.rotationRate.x, motion.rotationRate.y, motion.rotationRate.z)
+            let g = SIMD3(motion.gravity.x, motion.gravity.y, motion.gravity.z)
             let raw = Raw(
                 wall: bootToWall + motion.timestamp,
                 attitude: attitude,
-                rotationRate: attitude.act(SIMD3(motion.rotationRate.x, motion.rotationRate.y, motion.rotationRate.z)),
+                rotationRate: attitude.act(rot),
                 acceleration: attitude.act(SIMD3(motion.userAcceleration.x, motion.userAcceleration.y, motion.userAcceleration.z)) * 9.81,
-                gravity: attitude.act(SIMD3(motion.gravity.x, motion.gravity.y, motion.gravity.z))
+                gravity: attitude.act(g),
+                deviceGravity: g,
+                omega: simd_length(rot)
             )
             Task { @MainActor in self?.ingest(raw) }
         }
-        status = isCalibrated ? "Ready" : "Calibrate first"
+        status = "Hang the phone down and hold still"
     }
 
     func stop() {
@@ -105,44 +123,36 @@ final class StandInDetector: ShotSource {
         status = "Stopped"
     }
 
-    /// Hold the phone pointing down the target line, top edge forward, for a
-    /// second. The horizontal projection of that becomes play-frame x.
-    func calibrate() async -> Bool {
-        status = "Hold still…"
-        let start = Date.timeIntervalSinceReferenceDate
-        var stillFor: TimeInterval = 0
-        var lastAttitude: simd_quatd?
-        while Date.timeIntervalSinceReferenceDate - start < 4 {
-            try? await Task.sleep(for: .milliseconds(50))
-            guard let last = buffer.last else { continue }
-            if simd_length(last.rotationRate) < 0.35 {
-                stillFor += 0.05
-                lastAttitude = last.attitude
-                if stillFor >= 0.8 { break }
-            } else {
-                stillFor = 0
+    func awaitStance(timeout: TimeInterval) async -> Bool {
+        status = "Hang the phone down and hold still"
+        let deadline = Date.timeIntervalSinceReferenceDate + timeout
+        while Date.timeIntervalSinceReferenceDate < deadline, !Task.isCancelled {
+            if inStance, let last = buffer.last {
+                fixFrame(from: last.attitude)
+                status = "Set"
+                return true
             }
+            try? await Task.sleep(for: .milliseconds(40))
         }
-        guard stillFor >= 0.8, let attitude = lastAttitude else {
-            status = "Couldn't hold still. Try again."
-            return false
-        }
-        // Device +Y (toward the top edge) in the world, flattened.
-        var forward = attitude.act(SIMD3(0, 1, 0))
+        return false
+    }
+
+    /// The screen normal, flattened, is forward. With the phone hanging
+    /// straight down the screen faces horizontally, so this is well defined;
+    /// if someone manages to hang it with the screen facing the floor, keep
+    /// whatever frame we had.
+    private func fixFrame(from attitude: simd_quatd) {
+        var forward = attitude.act(SIMD3(0, 0, 1))
         forward.z = 0
         guard simd_length(forward) > 0.2 else {
-            status = "Point the top of the phone forward, not up."
-            return false
+            isCalibrated = frame != nil
+            return
         }
         let x = simd_normalize(forward)
         let y = SIMD3<Double>(0, 0, 1)
         let z = simd_cross(x, y)
-        // Rows are the play axes in world coordinates, so this maps world → play.
-        let m = simd_double3x3(rows: [x, y, z])
-        frame = simd_quatd(m)
+        frame = simd_quatd(simd_double3x3(rows: [x, y, z]))
         isCalibrated = true
-        status = "Ready"
-        return true
     }
 
     // MARK: - Detection
@@ -152,139 +162,109 @@ final class StandInDetector: ShotSource {
         if let first = buffer.first, raw.wall - first.wall > bufferSeconds {
             let cut = buffer.firstIndex { raw.wall - $0.wall <= bufferSeconds } ?? 0
             buffer.removeFirst(cut)
-            adjustIndices(by: -cut)
+            if case .rising(let p, let w, let i) = stroke {
+                stroke = .rising(peak: p, peakWall: w, peakIndex: max(0, i - cut))
+            }
         }
-        let omega = simd_length(raw.rotationRate)
-        liveRotation = omega
+        liveRotation = raw.omega
+
+        // Stance.
+        let hanging = raw.deviceGravity.y > 0.8 && raw.omega < 0.6
+        if hanging {
+            if stanceSince == nil { stanceSince = raw.wall }
+            inStance = raw.wall - stanceSince! >= stanceHold
+        } else {
+            stanceSince = nil
+            inStance = false
+        }
+
+        // Rest.
+        if raw.omega < restOmega {
+            if restCandidateSince == nil { restCandidateSince = raw.wall }
+            if raw.wall - restCandidateSince! >= restHold {
+                atRest = true
+                motionStart = nil
+            }
+        } else {
+            restCandidateSince = nil
+            if atRest {
+                atRest = false
+                motionStart = raw.wall
+            }
+        }
+
         guard isCalibrated else { return }
-
         let i = buffer.count - 1
-        let dt = i > 0 ? raw.wall - buffer[i - 1].wall : 0.01
 
-        switch state {
+        switch stroke {
         case .idle:
-            if omega > moveOmega || simd_length(raw.acceleration) > moveAccel {
-                state = .moving(start: i)
-                velocity = .zero
-                speeds = []
-                velocities = []
-                integrate(raw, dt: dt)
-                status = "Moving"
-            }
-
-        case .moving(let start):
-            integrate(raw, dt: dt)
-            if omega > swingOmega {
-                state = .swinging(start: start, peakOmega: omega, peakOmegaAt: i)
+            if raw.omega > strokeThreshold {
+                stroke = .rising(peak: raw.omega, peakWall: raw.wall, peakIndex: i)
                 status = "Swinging"
-            } else if omega < 1, simd_length(raw.acceleration) < 1, raw.wall - buffer[start].wall > 0.6 {
-                state = .idle
-                status = "Ready"
             }
-
-        case .swinging(let start, var peakOmega, var peakAt):
-            integrate(raw, dt: dt)
-            if omega > peakOmega {
-                peakOmega = omega
-                peakAt = i
+        case .rising(var peak, var peakWall, var peakIndex):
+            if raw.omega > peak {
+                peak = raw.omega
+                peakWall = raw.wall
+                peakIndex = i
             }
-            let sincePeak = raw.wall - buffer[peakAt].wall
-            let dropped = omega < peakOmega * releaseFraction && sincePeak > 0.05
-            let tooLong = raw.wall - buffer[start].wall > 3
-            if tooLong {
-                emit(start: start, end: i, peakOmega: peakOmega, peakOmegaAt: peakAt)
-                state = .idle
+            if raw.omega < peak * 0.6, raw.wall - peakWall >= 0.04 {
+                emit(peakIndex: peakIndex, peak: peak)
+                stroke = .cooldown
                 status = "Ready"
-            } else if dropped {
-                state = .settling(start: start, peakOmega: peakOmega, peakOmegaAt: peakAt, since: raw.wall)
             } else {
-                state = .swinging(start: start, peakOmega: peakOmega, peakOmegaAt: peakAt)
+                stroke = .rising(peak: peak, peakWall: peakWall, peakIndex: peakIndex)
             }
-
-        case .settling(let start, let peakOmega, let peakAt, let since):
-            integrate(raw, dt: dt)
-            if omega > peakOmega * releaseFraction {
-                // It was the top of the backswing. Same motion, keep going.
-                state = .swinging(start: start, peakOmega: max(peakOmega, omega), peakOmegaAt: omega > peakOmega ? i : peakAt)
-            } else if raw.wall - since >= settleTime {
-                emit(start: start, end: i, peakOmega: peakOmega, peakOmegaAt: peakAt)
-                state = .idle
-                status = "Ready"
+        case .cooldown:
+            if raw.omega < strokeThreshold * 0.5 {
+                stroke = .idle
             }
         }
     }
 
-    private func integrate(_ raw: Raw, dt: TimeInterval) {
-        velocity = velocity * velocityLeak + raw.acceleration * dt
-        velocities.append(velocity)
-        speeds.append(simd_length(velocity))
-    }
+    private func emit(peakIndex: Int, peak: Double) {
+        guard let frame, peakIndex < buffer.count else { return }
+        let r = buffer[peakIndex]
 
-    private func adjustIndices(by delta: Int) {
-        switch state {
-        case .idle: break
-        case .moving(let s): state = .moving(start: max(0, s + delta))
-        case .swinging(let s, let p, let at): state = .swinging(start: max(0, s + delta), peakOmega: p, peakOmegaAt: max(0, at + delta))
-        case .settling(let s, let p, let at, let since): state = .settling(start: max(0, s + delta), peakOmega: p, peakOmegaAt: max(0, at + delta), since: since)
-        }
-    }
+        // The face: where the screen points at the peak, in the play frame.
+        // A face can be held either way round, so make it point forward.
+        var face = frame.act(r.attitude.act(SIMD3(0, 0, 1)))
+        if face.x < 0 { face = -face }
+        let dir = simd_length(face) > 1e-6 ? simd_normalize(face) : SIMD3(1, 0, 0)
 
-    private func emit(start: Int, end: Int, peakOmega: Double, peakOmegaAt: Int) {
-        guard let frame, end > start, !speeds.isEmpty else { return }
-        // Release: the moment of peak rotation. The gyroscope is the honest
-        // sensor here — integrated acceleration drifts, and a bat or racket is
-        // turning fastest at the moment it would meet the ball. Speed and
-        // direction still come from the integrated velocity at that moment.
-        let releaseIndex = min(max(peakOmegaAt, start), end)
-        let releaseOffset = min(releaseIndex - start, speeds.count - 1)
-        let releaseRaw = buffer[releaseIndex]
-        let v = velocities[min(releaseOffset, velocities.count - 1)]
-        let releaseSpeed = simd_length(v)
-        let peakSpeed = speeds.max() ?? releaseSpeed
+        let spinPlay = frame.act(r.rotationRate)
+        let spinRate = simd_length(spinPlay)
+        let spinAxis = spinRate > 1e-3 ? spinPlay / spinRate : SIMD3(0, 1, 0)
 
-        let worldDirection = releaseSpeed > 0.5 ? simd_normalize(v) : simd_normalize(SIMD3(1, 0, 0.0))
-        let playDirection = frame.act(worldDirection)
-        let playSpin = frame.act(releaseRaw.rotationRate)
-        let spinRate = simd_length(playSpin)
-        let spinAxis = spinRate > 1e-3 ? playSpin / spinRate : SIMD3(0, 1, 0)
+        // Hand speed: rotation times an arm's length.
+        let speed = peak * 0.6
 
-        // Tempo: the hand goes back before it comes through. Find where the
-        // velocity along the release direction last crossed zero.
-        var crossing = start
-        for k in stride(from: min(releaseOffset, velocities.count - 1), to: 0, by: -1) {
-            if simd_dot(velocities[k], worldDirection) > 0 && simd_dot(velocities[k - 1], worldDirection) <= 0 {
-                crossing = start + k
-                break
-            }
-        }
-        let back = buffer[crossing].wall - buffer[start].wall
-        let through = max(0, releaseRaw.wall - buffer[crossing].wall)
+        let start = motionStart ?? (r.wall - 0.3)
+        let back = max(0.05, r.wall - start)
 
         let shot = Shot(
-            timestamp: releaseRaw.wall,
-            kind: through < 0.15 && back < 0.3 ? .throw : .swing,
-            releaseSpeed: releaseSpeed,
-            peakSpeed: peakSpeed,
-            direction: Vector3(playDirection.x, playDirection.y, playDirection.z),
-            attitude: quaternion(frame * releaseRaw.attitude),
+            timestamp: r.wall,
+            kind: .swing,
+            releaseSpeed: speed,
+            peakSpeed: speed,
+            direction: Vector3(dir.x, dir.y, dir.z),
+            attitude: quaternion(frame * r.attitude),
             spinAxis: Vector3(spinAxis.x, spinAxis.y, spinAxis.z),
-            spinRate: spinRate,
-            tempo: .init(back: back, through: through),
-            confidence: min(peakOmega / 12, 1) * (releaseSpeed > 1 ? 1 : 0.5)
+            spinRate: peak,
+            tempo: .init(back: back, through: 0),
+            confidence: min(peak / max(profile.peakRotation, 1), 1)
         )
 
-        // The trace: half a second before the hand moved to a little after it
-        // stopped, all in the play frame, so a fixture reads the same on any
-        // phone pointed down any line.
-        let from = buffer.firstIndex { $0.wall >= buffer[start].wall - 0.5 } ?? start
+        // The trace: a little before the hand moved to now, in the play frame.
+        let from = buffer.firstIndex { $0.wall >= start - 0.3 } ?? 0
         let t0 = buffer[from].wall
-        let trace = buffer[from...end].map { r in
-            let acc = frame.act(r.acceleration) / 9.81
-            let rot = frame.act(r.rotationRate)
-            let g = frame.act(r.gravity)
+        let trace = buffer[from...].map { s in
+            let acc = frame.act(s.acceleration) / 9.81
+            let rot = frame.act(s.rotationRate)
+            let g = frame.act(s.gravity)
             return MotionSample(
-                t: r.wall - t0,
-                attitude: quaternion(frame * r.attitude),
+                t: s.wall - t0,
+                attitude: quaternion(frame * s.attitude),
                 rotationRate: Vector3(rot.x, rot.y, rot.z),
                 userAcceleration: Vector3(acc.x, acc.y, acc.z),
                 gravity: Vector3(g.x, g.y, g.z)
